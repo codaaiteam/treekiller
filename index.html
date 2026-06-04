@@ -900,7 +900,7 @@ function duelHitPlayer(){
   popup(W/2,H*0.6,'受伤 -1','#e05252'); burst(W/2,H*0.42,'#e05252',16);
   if(dg.hearts<=0 && !dg.done){ dg.done=true; sceneTimeout(()=>{ stopScene(); levelFail('你倒在了树冠之下 —— 再来一次。'); },800); }
 }
-function startClash(){ dg.clash={ pos:0, dir:1, speed:0.02, sweetC:0.5, sweetH:0.15 }; dg.msg='最终对决！点击绿区终结它'; dg.msgT=2200; }
+function startClash(){ dg.prompt=null; dg.gapT=0; dg.clash={ pos:0, dir:1, speed:0.02, sweetC:0.5, sweetH:0.15 }; dg.msg='最终对决！点击绿区终结它'; dg.msgT=2200; }
 function duelUpdate(dt){
   if(dg.done) return;
   dg.t+=dt; if(dg.msgT>0)dg.msgT-=dt; if(dg.hitFx>0)dg.hitFx-=dt; if(dg.bossFx>0)dg.bossFx-=dt;
