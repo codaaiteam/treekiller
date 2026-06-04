@@ -1,0 +1,12 @@
+{
+  "name": "tree-arena",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Tree Arena — a single-file HTML minigame",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

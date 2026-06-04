@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Tree Arena</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;user-select:none}
+:root{
+  --bg:#030a03;--bg2:#061006;--border:rgba(255,255,255,.08);
+  --green:#4caf78;--gdark:#2d5a3a;--amber:#f59e0b;--red:#e05252;
+  --blue:#5b9bd5;--gold:#d4a853;--brown:#7a5a32;--text:#c0d4b8;--muted:#5a7a5a;
+  --font:'Space Mono',monospace;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden;font-size:13px;display:flex;flex-direction:column}
+
+@keyframes bannerIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+@keyframes popUp{0%{opacity:0;transform:translateY(0) scale(.6)}30%{opacity:1;transform:translateY(-14px) scale(1.15)}100%{opacity:0;transform:translateY(-46px) scale(.9)}}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes flash{from{opacity:.5}to{opacity:0}}
+
+/* ── Overlays ── */
+.screen{position:fixed;inset:0;background:rgba(3,10,3,.96);display:none;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(6px)}
+.screen.show{display:flex;animation:bannerIn .3s ease}
+.card{max-width:540px;width:92%;border:1px solid var(--border);padding:38px 38px;background:var(--bg2);text-align:center}
+.title{font-size:22px;font-weight:700;color:var(--green);letter-spacing:4px;margin-bottom:6px}
+.sub{font-size:11px;color:var(--muted);letter-spacing:2px;margin-bottom:24px}
+.lineup{display:flex;flex-direction:column;gap:7px;margin-bottom:26px}
+.lvrow{display:flex;align-items:center;gap:12px;padding:8px 12px;border:1px solid var(--border);border-radius:4px;text-align:left}
+.lvrow.locked{opacity:.4}
+.lvrow.current{border-color:var(--green);background:rgba(76,175,120,.06)}
+.lv-ic{font-size:20px;flex-shrink:0;width:26px;text-align:center}
+.lv-meta{flex:1}
+.lv-name{font-size:13px;font-weight:700;color:var(--text)}
+.lv-name .lvnum{color:var(--gold);margin-right:6px}
+.lv-desc{font-size:10px;color:var(--muted);margin-top:1px}
+.lv-rivals{font-size:9px;color:var(--muted);flex-shrink:0}
+.btn{background:transparent;border:1px solid var(--gdark);color:var(--green);padding:12px 34px;font-family:var(--font);font-size:13px;letter-spacing:2px;cursor:pointer;transition:all .2s}
+.btn:hover{background:rgba(76,175,120,.1);border-color:var(--green)}
+
+/* intro / clear card */
+.ic-icon{font-size:46px;margin-bottom:10px}
+.ic-lv{font-size:11px;color:var(--gold);letter-spacing:3px;margin-bottom:4px}
+.ic-name{font-size:26px;font-weight:700;margin-bottom:10px}
+.ic-goal{font-size:13px;color:var(--text);line-height:1.9;margin-bottom:6px}
+.ic-how{font-size:11px;color:var(--muted);line-height:1.9;margin-bottom:24px}
+.ic-stat{display:flex;justify-content:center;gap:24px;margin-bottom:22px}
+.ic-stat .s-v{font-size:22px;font-weight:700;color:var(--green)}
+.ic-stat .s-l{font-size:10px;color:var(--muted)}
+
+/* ── HUD ── */
+.hud{height:46px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid var(--border)}
+.hud-l{display:flex;align-items:center;gap:14px}
+.hud-title{font-size:13px;font-weight:700;color:var(--green);letter-spacing:2px}
+.lvl-badge{font-size:11px;font-weight:700;padding:2px 9px;border-radius:3px;border:1px solid var(--gold);color:var(--gold)}
+.hud-path{display:flex;gap:5px}
+.pnode{width:24px;height:8px;border-radius:4px;border:1px solid var(--muted);transition:all .4s;display:flex;align-items:center;justify-content:center;font-size:0}
+.pnode.done{background:var(--green);border-color:var(--green)}
+.pnode.now{border-color:var(--gold);background:var(--gold)}
+.hud-r{display:flex;align-items:center;gap:18px}
+.hud-score{font-size:13px;font-weight:700;color:var(--gold)}
+.hud-score .lbl{font-size:9px;color:var(--muted);font-weight:400;margin-right:4px}
+
+/* ── Stage ── */
+.stage{flex:1;position:relative;overflow:hidden}
+#game{display:block;width:100%;height:100%}
+.stage-hint{position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:11px;color:var(--muted);letter-spacing:1px;pointer-events:none}
+.stage-hint b{color:var(--green)}
+.goal-bar-wrap{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:280px;text-align:center;pointer-events:none}
+.goal-label{font-size:10px;color:var(--muted);letter-spacing:2px;margin-bottom:4px}
+.goal-track{height:8px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:4px;overflow:hidden}
+.goal-fill{height:100%;background:linear-gradient(90deg,var(--gdark),var(--green));border-radius:4px;width:0%;transition:width .15s ease}
+.flash-overlay{position:absolute;inset:0;background:var(--green);opacity:0;pointer-events:none}
+.flash-overlay.go{animation:flash .4s ease}
+</style>
+</head>
+<body>
+
+<!-- Intro / Level Map -->
+<div class="screen show" id="scIntro">
+  <div class="card">
+    <div class="title">THE TREE ARENA</div>
+    <div class="sub">从种子到树冠 · 五关闯关</div>
+    <div class="lineup" id="lineup"></div>
+    <button class="btn" onclick="enterLevel(1)">开始 Lv1 →</button>
+  </div>
+</div>
+
+<!-- Level Intro -->
+<div class="screen" id="scLevelIntro">
+  <div class="card">
+    <div class="ic-icon" id="liIcon">🌰</div>
+    <div class="ic-lv" id="liLv">LEVEL 1</div>
+    <div class="ic-name" id="liName">破土</div>
+    <div class="ic-goal" id="liGoal"></div>
+    <div class="ic-how" id="liHow"></div>
+    <button class="btn" id="liBtn" onclick="beginPlay()">开始 →</button>
+  </div>
+</div>
+
+<!-- Clear -->
+<div class="screen" id="scClear">
+  <div class="card">
+    <div class="ic-icon" id="clIcon">🌱</div>
+    <div class="ic-lv" id="clLv">LEVEL 1 CLEAR</div>
+    <div class="ic-name" id="clName" style="color:var(--green)">破土成功！</div>
+    <div class="ic-stat">
+      <div><div class="s-v" id="clScore">0</div><div class="s-l">本关得分</div></div>
+      <div><div class="s-v" id="clTotal">0</div><div class="s-l">累计分数</div></div>
+    </div>
+    <div class="ic-how" id="clNext"></div>
+    <button class="btn" id="clBtn" onclick="nextLevel()">进入下一关 →</button>
+  </div>
+</div>
+
+<!-- HUD -->
+<div class="hud">
+  <div class="hud-l">
+    <div class="hud-title">THE TREE ARENA</div>
+    <div class="lvl-badge" id="lvlBadge">Lv1 破土</div>
+  </div>
+  <div class="hud-path" id="hudPath"></div>
+  <div class="hud-r">
+    <div class="hud-score"><span class="lbl">分数</span><span id="hudScore">0</span></div>
+  </div>
+</div>
+
+<!-- Stage -->
+<div class="stage" id="stage">
+  <canvas id="game"></canvas>
+  <div class="goal-bar-wrap" id="goalWrap" style="display:none">
+    <div class="goal-label" id="goalLabel">破土进度</div>
+    <div class="goal-track"><div class="goal-fill" id="goalFill"></div></div>
+  </div>
+  <div class="stage-hint" id="stageHint"></div>
+  <div class="flash-overlay" id="flash"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  LEVEL LINEUP
+// ═══════════════════════════════════════════════════════
+const LEVELS=[
+  {lv:1,icon:'🌰',name:'破土',type:'breakout',rivals:0,
+   goal:'顶破土壤，钻出地面',
+   how:'① 屏幕下方有一条<b>力度条</b>，白线左右来回扫\n② 白线扫到<b style="color:#5bd55b">中间绿区</b>时 → 点击屏幕 / 按空格\n③ 命中绿区，嫩芽就往上顶一截；连续命中有连击加成\n顶到地面就通关。（进绿区时会有"▼ 点击！"提示）',
+   ready:true},
+  {lv:2,icon:'🌱',name:'够阳光',type:'catch',rivals:1,
+   goal:'接住飘落的阳光，集满光照',
+   how:'左右移动你的嫩芽接住阳光。\n出现一个对手，它抢走的光，你就拿不到。',
+   ready:false},
+  {lv:3,icon:'🌿',name:'荡藤',type:'swing',rivals:2,
+   goal:'荡藤攀爬到目标高度',
+   how:'点击甩出藤蔓，抓住更高的枝节往上爬。\n两个对手并排和你竞速。',
+   ready:false},
+  {lv:4,icon:'🌸',name:'护果',type:'shoot',rivals:2,
+   goal:'打退害虫和对手，守住果实',
+   how:'瞄准射击飞来抢果的害虫与对手藤蔓。\n对手开始主动攻击你。',
+   ready:false},
+  {lv:5,icon:'🌲',name:'夺冠',type:'boss',rivals:1,
+   goal:'击败最强对手，登顶树冠',
+   how:'闪避、攀爬、抢下树冠。\n赢了，你就是树冠之王。',
+   ready:false},
+];
+
+let G={level:1,score:0,unlocked:1};
+
+// ═══════════════════════════════════════════════════════
+//  DOM / CANVAS
+// ═══════════════════════════════════════════════════════
+const cv=document.getElementById('game'),ctx=cv.getContext('2d');
+let W=0,H=0,DPR=Math.min(2,window.devicePixelRatio||1);
+function resize(){const r=document.getElementById('stage').getBoundingClientRect();W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);}
+window.addEventListener('resize',()=>{resize();});
+
+// ═══════════════════════════════════════════════════════
+//  SHELL
+// ═══════════════════════════════════════════════════════
+function show(id){document.getElementById(id).classList.add('show');}
+function hide(id){document.getElementById(id).classList.remove('show');}
+function renderLineup(){
+  document.getElementById('lineup').innerHTML=LEVELS.map(L=>{
+    const locked=L.lv>G.unlocked;
+    const cur=L.lv===G.level&&!locked;
+    return`<div class="lvrow ${locked?'locked':''} ${cur?'current':''}">
+      <div class="lv-ic">${L.icon}</div>
+      <div class="lv-meta"><div class="lv-name"><span class="lvnum">Lv${L.lv}</span>${L.name}${!L.ready?' <span style="color:var(--muted);font-size:9px">· 开发中</span>':''}</div><div class="lv-desc">${L.goal}</div></div>
+      <div class="lv-rivals">${L.rivals?('对手 ×'+L.rivals):'独自'}</div>
+    </div>`;
+  }).join('');
+}
+function renderHUD(){
+  const L=LEVELS[G.level-1];
+  document.getElementById('lvlBadge').textContent=`Lv${L.lv} ${L.name}`;
+  document.getElementById('hudScore').textContent=G.score;
+  document.getElementById('hudPath').innerHTML=LEVELS.map(x=>`<div class="pnode ${x.lv<G.level?'done':x.lv===G.level?'now':''}"></div>`).join('');
+}
+
+function enterLevel(lv){
+  G.level=lv;
+  const L=LEVELS[lv-1];
+  hide('scIntro');hide('scClear');
+  document.getElementById('liIcon').textContent=L.icon;
+  document.getElementById('liLv').textContent='LEVEL '+lv;
+  document.getElementById('liName').textContent=L.name;
+  document.getElementById('liGoal').textContent=L.goal;
+  document.getElementById('liHow').innerHTML=L.how.replace(/\n/g,'<br>');
+  document.getElementById('liBtn').textContent=L.ready?'开始 →':'敬请期待';
+  document.getElementById('liBtn').disabled=!L.ready;
+  document.getElementById('liBtn').style.opacity=L.ready?'1':'.4';
+  renderHUD();
+  show('scLevelIntro');
+}
+function beginPlay(){
+  hide('scLevelIntro');
+  const L=LEVELS[G.level-1];
+  resize();
+  if(L.type==='breakout')startBreakout();
+}
+function levelClear(levelScore){
+  G.score+=levelScore;
+  if(G.level+1>G.unlocked)G.unlocked=G.level+1;
+  const L=LEVELS[G.level-1],N=LEVELS[G.level];
+  document.getElementById('clIcon').textContent=N?N.icon:'👑';
+  document.getElementById('clLv').textContent='LEVEL '+G.level+' CLEAR';
+  document.getElementById('clName').textContent=L.name+' 通关！';
+  document.getElementById('clScore').textContent=levelScore;
+  document.getElementById('clTotal').textContent=G.score;
+  if(N){
+    document.getElementById('clNext').innerHTML=`下一关 <b style="color:var(--gold)">Lv${N.lv} ${N.name}</b> — ${N.goal}${N.ready?'':'<br><span style="color:var(--muted)">（开发中，敬请期待）</span>'}`;
+    document.getElementById('clBtn').textContent=N.ready?'进入下一关 →':'返回关卡地图';
+  }else{
+    document.getElementById('clNext').textContent='你已登顶树冠。';
+    document.getElementById('clBtn').textContent='返回';
+  }
+  renderHUD();
+  show('scClear');
+}
+function nextLevel(){
+  const N=LEVELS[G.level];
+  hide('scClear');
+  if(N&&N.ready)enterLevel(G.level+1);
+  else{renderLineup();show('scIntro');}
+}
+
+// ═══════════════════════════════════════════════════════
+//  EFFECTS
+// ═══════════════════════════════════════════════════════
+let particles=[],popups=[],shake=0;
+function burst(x,y,color,n){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=1+Math.random()*4;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-1,life:1,color});}}
+function popup(x,y,text,color){popups.push({x,y,text,color,life:1});}
+function flashGreen(){const f=document.getElementById('flash');f.classList.remove('go');void f.offsetWidth;f.classList.add('go');}
+function stepEffects(){
+  particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.18;p.life-=0.025;});
+  particles=particles.filter(p=>p.life>0);
+  popups.forEach(p=>p.life-=0.018);
+  popups=popups.filter(p=>p.life>0);
+  if(shake>0)shake*=0.85;if(shake<0.3)shake=0;
+}
+function drawEffects(){
+  particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.color;ctx.fillRect(p.x,p.y,3,3);});
+  ctx.globalAlpha=1;
+  popups.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.color;ctx.font='bold 20px "Space Mono",monospace';ctx.textAlign='center';ctx.fillText(p.text,p.x,p.y-(1-p.life)*40);});
+  ctx.globalAlpha=1;ctx.textAlign='left';
+}
+
+// ═══════════════════════════════════════════════════════
+//  LEVEL 1 — 破土 (timing power meter)
+// ═══════════════════════════════════════════════════════
+let mg=null,raf=null;
+function startBreakout(){
+  document.getElementById('goalWrap').style.display='block';
+  document.getElementById('goalLabel').textContent='破土进度';
+  document.getElementById('stageHint').innerHTML='白线扫到<b>绿区</b>时，点击屏幕 / 空格';
+  mg={
+    progress:0,           // 0..100 toward surface
+    levelScore:0,
+    meterPos:0.5,meterDir:1,meterSpeed:0.011,
+    sweetCenter:0.5,sweetHalf:0.22,   // FIXED center, generous zone
+    combo:0,best:0,
+    done:false,
+    soilTaps:0,
+  };
+  bindInput();
+  loop();
+}
+function meterHit(){
+  if(!mg||mg.done)return;
+  const dist=Math.abs(mg.meterPos-mg.sweetCenter);
+  let gain,label,color;
+  if(dist<mg.sweetHalf*0.4){gain=22;label='PERFECT';color='#5bd55b';mg.combo++;}
+  else if(dist<mg.sweetHalf){gain=14;label='GOOD';color='#4caf78';mg.combo++;}
+  else{gain=0;label='差一点';color='#e0a052';mg.combo=0;}
+  mg.best=Math.max(mg.best,mg.combo);
+  const comboBonus=mg.combo>1?Math.min(mg.combo*2,16):0;
+  if(gain>0)gain+=comboBonus*0.4;
+  mg.progress=Math.max(0,Math.min(100,mg.progress+gain));
+  // score
+  const sc=gain>0?Math.round((label==='PERFECT'?100:50)+comboBonus*3):0;
+  mg.levelScore+=sc;
+  G.score+=sc>0?0:0; // accumulate at clear
+  // fx
+  const tipY=H-40-(mg.progress/100)*(H-150);
+  const cx=W/2;
+  if(gain>0){burst(cx,tipY,color,label==='PERFECT'?18:10);shake=label==='PERFECT'?7:3;}
+  else{burst(cx,tipY,color,6);shake=4;}
+  popup(cx,tipY-20,label+(mg.combo>1&&gain>0?' x'+mg.combo:''),color);
+  // difficulty: zone stays CENTERED, shrinks gently, cursor speeds up gradually
+  mg.sweetHalf=Math.max(0.13,0.22-0.09*(mg.progress/100));
+  mg.meterSpeed=0.011+0.013*(mg.progress/100);
+  document.getElementById('hudScore').textContent=G.score+mg.levelScore;
+  if(mg.progress>=100&&!mg.done){
+    mg.done=true;flashGreen();shake=12;
+    burst(cx,tipY,'#5bd55b',40);
+    popup(cx,tipY-30,'破土！','#5bd55b');
+    setTimeout(()=>{stopInput();cancelAnimationFrame(raf);levelClear(mg.levelScore+200);},900);
+  }
+}
+function loop(){
+  // update meter
+  if(mg&&!mg.done){
+    mg.meterPos+=mg.meterDir*mg.meterSpeed;
+    if(mg.meterPos>1){mg.meterPos=1;mg.meterDir=-1;}
+    if(mg.meterPos<0){mg.meterPos=0;mg.meterDir=1;}
+  }
+  stepEffects();
+  drawBreakout();
+  raf=requestAnimationFrame(loop);
+}
+function drawBreakout(){
+  ctx.save();
+  if(shake>0)ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);
+  ctx.clearRect(-20,-20,W+40,H+40);
+  // sky above surface
+  const surfaceY=110;
+  const g=ctx.createLinearGradient(0,0,0,surfaceY);
+  g.addColorStop(0,'#0a1f0a');g.addColorStop(1,'#071407');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,surfaceY);
+  // sun
+  ctx.globalAlpha=.5+.2*Math.sin(Date.now()/600);
+  ctx.fillStyle='#d4a853';ctx.beginPath();ctx.arc(W/2,46,20,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+  // soil with 3 layer bands
+  const soilTop=surfaceY;
+  const bands=['#2a1d0e','#241808','#1d1306'];
+  const bandH=(H-soilTop)/3;
+  for(let i=0;i<3;i++){ctx.fillStyle=bands[i];ctx.fillRect(0,soilTop+i*bandH,W,bandH);}
+  // surface line
+  ctx.strokeStyle='#3a5a2a';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,surfaceY);ctx.lineTo(W,surfaceY);ctx.stroke();
+  // layer divider lines, brighten as progress passes
+  for(let i=1;i<3;i++){const ly=soilTop+i*bandH;const passed=mg.progress>(100-i/3*100);ctx.strokeStyle=passed?'rgba(76,175,120,.3)':'rgba(0,0,0,.4)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,ly);ctx.lineTo(W,ly);ctx.stroke();}
+  // sprout: grows from bottom up to (progress→surface)
+  const cx=W/2;
+  const tipY=H-30-(mg.progress/100)*(H-30-surfaceY);
+  // stem
+  ctx.strokeStyle='#4caf78';ctx.lineWidth=5;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(cx,H-20);
+  // slight wiggle
+  ctx.quadraticCurveTo(cx+Math.sin(Date.now()/400)*4,(H-20+tipY)/2,cx,tipY);ctx.stroke();
+  // seed/tip
+  ctx.fillStyle=mg.progress>=100?'#5bd55b':'#6b4a2a';
+  ctx.beginPath();ctx.arc(cx,tipY,8,0,Math.PI*2);ctx.fill();
+  if(mg.progress>=100){
+    // leaves
+    ctx.fillStyle='#5bd55b';
+    ctx.beginPath();ctx.ellipse(cx-10,tipY-4,10,5,-0.6,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(cx+10,tipY-4,10,5,0.6,0,Math.PI*2);ctx.fill();
+  }
+  // depth markers
+  drawEffects();
+  // power meter
+  drawMeter();
+  ctx.restore();
+}
+function drawMeter(){
+  const mw=Math.min(440,W-80),mx=(W-mw)/2,my=H-82,mh=20;
+  const inZone=Math.abs(mg.meterPos-mg.sweetCenter)<mg.sweetHalf;
+  // track
+  ctx.fillStyle='rgba(255,255,255,.06)';roundRect(mx,my,mw,mh,10);ctx.fill();
+  // sweet zone (glows when cursor inside)
+  const sx=mx+(mg.sweetCenter-mg.sweetHalf)*mw,sw=mg.sweetHalf*2*mw;
+  ctx.save();
+  if(inZone&&!mg.done){ctx.shadowColor='#5bd55b';ctx.shadowBlur=22;}
+  const sg=ctx.createLinearGradient(sx,0,sx+sw,0);
+  sg.addColorStop(0,'rgba(76,175,120,.3)');sg.addColorStop(.5,inZone?'rgba(91,213,91,.9)':'rgba(91,213,91,.6)');sg.addColorStop(1,'rgba(76,175,120,.3)');
+  ctx.fillStyle=sg;roundRect(Math.max(mx,sx),my,Math.min(sw,mw),mh,10);ctx.fill();
+  ctx.restore();
+  // perfect core (lighter center)
+  const pcW=mg.sweetHalf*0.8*mw,pcx=mx+mg.sweetCenter*mw-pcW/2;
+  ctx.fillStyle='rgba(255,255,255,.35)';roundRect(pcx,my,pcW,mh,5);ctx.fill();
+  // cursor
+  const curX=mx+mg.meterPos*mw;
+  ctx.fillStyle='#fff';ctx.fillRect(curX-2,my-6,4,mh+12);
+  ctx.beginPath();ctx.moveTo(curX,my-8);ctx.lineTo(curX-6,my-15);ctx.lineTo(curX+6,my-15);ctx.fill();
+  // helper line under meter
+  ctx.fillStyle='#5a7a5a';ctx.font='12px "Space Mono",monospace';ctx.textAlign='center';
+  ctx.fillText('白线扫到绿区 → 点击 / 空格',W/2,my+mh+24);
+  // BIG in-zone cue (teaches timing)
+  if(inZone&&!mg.done){
+    const pulse=0.55+0.45*Math.abs(Math.sin(Date.now()/110));
+    ctx.globalAlpha=pulse;
+    ctx.fillStyle='#5bd55b';ctx.font='bold 26px "Space Mono",monospace';
+    ctx.fillText('▼ 点击！',W/2,my-22);
+    ctx.globalAlpha=1;
+  }
+  // combo
+  if(mg.combo>1){ctx.fillStyle='#5bd55b';ctx.font='bold 14px "Space Mono",monospace';ctx.fillText('连击 x'+mg.combo,W/2,my-52);}
+  ctx.textAlign='left';
+}
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+// goal bar update inside loop via DOM
+function updateGoalBar(){if(mg)document.getElementById('goalFill').style.width=mg.progress+'%';}
+const _loop=loop;loop=function(){updateGoalBar();_loop();};
+
+// ═══════════════════════════════════════════════════════
+//  INPUT
+// ═══════════════════════════════════════════════════════
+function onTap(e){if(e.type==='keydown'){if(e.code!=='Space')return;e.preventDefault();}meterHit();}
+function bindInput(){document.getElementById('stage').addEventListener('pointerdown',onTap);window.addEventListener('keydown',onTap);}
+function stopInput(){document.getElementById('stage').removeEventListener('pointerdown',onTap);window.removeEventListener('keydown',onTap);}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+resize();renderLineup();renderHUD();
+</script>
+</body>
+</html>
