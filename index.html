@@ -172,8 +172,8 @@ const LEVELS=[
    ready:true},
   {lv:5,icon:'🌲',name:'夺冠',type:'boss',rivals:1,
    goal:'击败最强对手，登顶树冠',
-   how:'闪避、攀爬、抢下树冠。\n赢了，你就是树冠之王。',
-   ready:false},
+   how:'和树冠王决斗。看 Boss 的光圈：<b style="color:#e05252">红光出现「格挡」</b>、<b style="color:#ffd54a">金光出现「反击」</b>，在光圈缩到中心圈时点击/空格。\n反击削 Boss 血，格挡失手你掉一颗心(3心)。把 Boss 打到 20% 进入<b>最终对决</b>：点击绿区终结它。\n赢了，你就是树冠之王。',
+   ready:true},
 ];
 
 let G={level:1,score:0,unlocked:1};
@@ -233,6 +233,7 @@ function beginPlay(){
   else if(L.type==='catch')startCatch();
   else if(L.type==='swing')startSwing();
   else if(L.type==='shoot')startShoot();
+  else if(L.type==='boss')startDuel();
 }
 function levelClear(levelScore){
   G.score+=levelScore;
@@ -319,12 +320,15 @@ function _key(e){ if(scene&&scene.onKey) scene.onKey(e); }
 function _keyup(e){ if(scene&&scene.onKeyUp) scene.onKeyUp(e); }
 function bindInput(){
   const s=document.getElementById('stage');
-  s.addEventListener('pointerdown',_down); s.addEventListener('pointermove',_move); s.addEventListener('pointerup',_up);
+  s.addEventListener('pointerdown',_down); s.addEventListener('pointermove',_move);
+  // release/cancel on window so holding then dragging off-canvas still clears state (per Codex note)
+  window.addEventListener('pointerup',_up); window.addEventListener('pointercancel',_up);
   window.addEventListener('keydown',_key); window.addEventListener('keyup',_keyup);
 }
 function unbindInput(){
   const s=document.getElementById('stage');
-  s.removeEventListener('pointerdown',_down); s.removeEventListener('pointermove',_move); s.removeEventListener('pointerup',_up);
+  s.removeEventListener('pointerdown',_down); s.removeEventListener('pointermove',_move);
+  window.removeEventListener('pointerup',_up); window.removeEventListener('pointercancel',_up);
   window.removeEventListener('keydown',_key); window.removeEventListener('keyup',_keyup);
 }
 
@@ -870,6 +874,112 @@ function drawShoot(){
   // timer + kills
   ctx.fillStyle='#c0d4b8'; ctx.font='bold 16px "Space Mono",monospace'; ctx.textAlign='left'; ctx.fillText('⏱ '+Math.ceil(Math.max(0,hg.time)/1000)+'s',20,34);
   ctx.fillStyle='#9ad06a'; ctx.font='12px "Space Mono",monospace'; ctx.fillText('击杀 '+hg.kills,20,54);
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════
+//  LEVEL 5 — 夺冠 (boss duel: time blocks/counters → Final Clash)
+// ═══════════════════════════════════════════════════════
+let dg=null;
+const DUEL_PHASES={ 1:{speed:0.013,window:0.16,gold:0.42}, 2:{speed:0.019,window:0.13,gold:0.50}, 3:{speed:0.026,window:0.11,gold:0.62} };
+function duelPhase(){ return dg.bossHP>66?1:dg.bossHP>33?2:3; }
+function startDuel(){
+  document.getElementById('goalWrap').style.display='block';
+  document.getElementById('goalLabel').textContent='树冠 Boss · 击败它';
+  document.getElementById('stageHint').innerHTML='<b style="color:#e05252">红光→点格挡</b>　<b style="color:#ffd54a">金光→点反击</b>　看准光圈缩到中心时点击/空格';
+  dg={ bossHP:100, hearts:3, done:false, levelScore:0, prompt:null, gapT:1100, t:0, msg:'看招！', msgT:1500, hitFx:0, bossFx:0, clash:null, clashDone:false };
+  scene={ update:duelUpdate, draw:drawDuel, onDown:()=>duelTap(), onKey:(e)=>{ if(e.code==='Space'){ e.preventDefault(); duelTap(); } } };
+  bindInput(); startLoop();
+}
+function spawnPrompt(){
+  const ph=DUEL_PHASES[duelPhase()];
+  dg.prompt={ type: Math.random()<ph.gold?'gold':'red', p:0, speed:ph.speed, window:ph.window, hit:0.82, resolved:false, fade:0 };
+}
+function duelHitPlayer(){
+  dg.hearts--; dg.hitFx=300; shake=8;
+  popup(W/2,H*0.6,'受伤 -1','#e05252'); burst(W/2,H*0.42,'#e05252',16);
+  if(dg.hearts<=0 && !dg.done){ dg.done=true; sceneTimeout(()=>{ stopScene(); levelFail('你倒在了树冠之下 —— 再来一次。'); },800); }
+}
+function startClash(){ dg.clash={ pos:0, dir:1, speed:0.02, sweetC:0.5, sweetH:0.15 }; dg.msg='最终对决！点击绿区终结它'; dg.msgT=2200; }
+function duelUpdate(dt){
+  if(dg.done) return;
+  dg.t+=dt; if(dg.msgT>0)dg.msgT-=dt; if(dg.hitFx>0)dg.hitFx-=dt; if(dg.bossFx>0)dg.bossFx-=dt;
+  document.getElementById('goalFill').style.width=Math.min(100,(100-dg.bossHP))+'%';
+  if(dg.bossHP<=20 && !dg.clash && !dg.clashDone) startClash();
+  if(dg.clash){
+    dg.clash.pos+=dg.clash.dir*dg.clash.speed*(dt/16);
+    if(dg.clash.pos>1){dg.clash.pos=1;dg.clash.dir=-1;} if(dg.clash.pos<0){dg.clash.pos=0;dg.clash.dir=1;}
+    return;
+  }
+  if(!dg.prompt){ dg.gapT-=dt; if(dg.gapT<=0) spawnPrompt(); return; }
+  if(!dg.prompt.resolved){
+    dg.prompt.p+=dg.prompt.speed*(dt/16);
+    if(dg.prompt.p>=1){
+      if(dg.prompt.type==='red') duelHitPlayer(); else popup(W/2,H*0.46,'反击落空','#9a9a8a');
+      dg.prompt.resolved=true; dg.prompt.fade=300; dg.gapT=Math.max(480,820-duelPhase()*90);
+    }
+  } else { dg.prompt.fade-=dt; if(dg.prompt.fade<=0) dg.prompt=null; }
+}
+function duelTap(){
+  if(!dg||dg.done) return;
+  if(dg.clash){
+    if(Math.abs(dg.clash.pos-dg.clash.sweetC)<dg.clash.sweetH){
+      dg.bossHP=0; dg.clash=null; dg.clashDone=true; dg.done=true; flashGreen(); shake=14;
+      popup(W/2,H*0.30,'夺冠！','#5bd55b'); burst(W/2,H*0.3,'#ffd54a',50); dg.levelScore+=400;
+      sceneTimeout(()=>{ stopScene(); levelClear(dg.levelScore + dg.hearts*150 + 300); },1100);
+    } else { popup(W/2,H*0.62,'没踩中绿区','#e0a052'); duelHitPlayer(); }
+    return;
+  }
+  if(dg.prompt && !dg.prompt.resolved){
+    const d=Math.abs(dg.prompt.p-dg.prompt.hit);
+    dg.prompt.resolved=true; dg.prompt.fade=300; dg.gapT=Math.max(480,820-duelPhase()*90);
+    if(d<dg.prompt.window){
+      if(dg.prompt.type==='red'){ popup(W/2,H*0.46,'格挡!','#5b9bd5'); burst(W/2,H*0.42,'#5b9bd5',10); shake=3; dg.levelScore+=20; }
+      else { dg.bossHP=Math.max(0,dg.bossHP-12); dg.bossFx=240; shake=5; dg.levelScore+=80; popup(W/2,H*0.3,'反击! -12','#ffd54a'); burst(W/2,H*0.3,'#ffd54a',16); }
+    } else {
+      if(dg.prompt.type==='red') duelHitPlayer(); else popup(W/2,H*0.46,'太早/太晚','#e0a052');
+    }
+  }
+}
+function drawDuel(){
+  ctx.save();
+  if(shake>0)ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);
+  ctx.clearRect(-20,-20,W+40,H+40);
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#160a14'); g.addColorStop(1,'#07120a');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  const cx=W/2, bossY=H*0.26;
+  ctx.save(); if(dg.bossFx>0){ctx.shadowColor='#ffd54a';ctx.shadowBlur=22;}
+  ctx.fillStyle=dg.hitFx>0?'#3a1414':'#241a2a'; ctx.strokeStyle='#7a5a8a'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(cx,bossY,52,0,Math.PI*2); ctx.fill(); ctx.stroke(); ctx.restore();
+  ctx.fillStyle='#d4a853'; for(let k=-2;k<=2;k++){ ctx.beginPath(); ctx.moveTo(cx+k*20,bossY-44); ctx.lineTo(cx+k*20-8,bossY-66); ctx.lineTo(cx+k*20+8,bossY-66); ctx.closePath(); ctx.fill(); }
+  ctx.fillStyle='#c0a0d0'; ctx.font='bold 13px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('树冠王',cx,bossY+5);
+  const bw=320,bx=cx-bw/2,by=bossY+74;
+  ctx.fillStyle='rgba(255,255,255,.08)'; roundRect(bx,by,bw,12,6); ctx.fill();
+  ctx.fillStyle='#b05a7a'; roundRect(bx,by,bw*Math.max(0,dg.bossHP)/100,12,6); ctx.fill();
+  ctx.fillStyle='#c0d4b8'; ctx.font='11px "Space Mono",monospace'; ctx.fillText('BOSS  '+Math.round(Math.max(0,dg.bossHP)),cx,by-6);
+  if(dg.prompt){
+    const col=dg.prompt.type==='red'?'#e05252':'#ffd54a', py=H*0.54, tR=30;
+    const ringR=tR+(1-dg.prompt.p)*120, inWin=Math.abs(dg.prompt.p-dg.prompt.hit)<dg.prompt.window && !dg.prompt.resolved;
+    ctx.globalAlpha=.5; ctx.strokeStyle=col; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx,py,tR,0,Math.PI*2); ctx.stroke(); ctx.globalAlpha=1;
+    ctx.strokeStyle=col; ctx.lineWidth=inWin?5:3; if(inWin){ctx.shadowColor=col;ctx.shadowBlur=18;}
+    ctx.beginPath(); ctx.arc(cx,py,Math.max(tR,ringR),0,Math.PI*2); ctx.stroke(); ctx.shadowBlur=0;
+    ctx.fillStyle=col; ctx.font='bold 18px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(dg.prompt.type==='red'?'格挡':'反击',cx,py+6);
+    if(inWin){ const pulse=.5+.5*Math.abs(Math.sin(dg.t/80)); ctx.globalAlpha=pulse; ctx.fillStyle=col; ctx.font='bold 20px "Space Mono",monospace'; ctx.fillText('● 点!',cx,py+tR+34); ctx.globalAlpha=1; }
+  }
+  if(dg.clash){
+    const mw=Math.min(440,W-80),mx=(W-mw)/2,my=H*0.54,mh=22, inZone=Math.abs(dg.clash.pos-dg.clash.sweetC)<dg.clash.sweetH;
+    ctx.fillStyle='rgba(255,255,255,.06)'; roundRect(mx,my,mw,mh,11); ctx.fill();
+    const sx=mx+(dg.clash.sweetC-dg.clash.sweetH)*mw, sw=dg.clash.sweetH*2*mw;
+    if(inZone){ctx.shadowColor='#5bd55b';ctx.shadowBlur=20;} ctx.fillStyle='rgba(91,213,91,.85)'; roundRect(sx,my,sw,mh,11); ctx.fill(); ctx.shadowBlur=0;
+    const curX=mx+dg.clash.pos*mw; ctx.fillStyle='#fff'; ctx.fillRect(curX-2,my-6,4,mh+12);
+    ctx.fillStyle='#ffd54a'; ctx.font='bold 16px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('最终对决 · 点击绿区',cx,my-16);
+  }
+  drawEffects();
+  ctx.textAlign='left'; ctx.font='20px "Space Mono",monospace';
+  for(let k=0;k<3;k++){ ctx.fillStyle=k<dg.hearts?'#e05252':'rgba(224,82,82,.2)'; ctx.fillText('♥',24+k*26,H-24); }
+  ctx.fillStyle='#7a5a8a'; ctx.font='11px "Space Mono",monospace'; ctx.textAlign='right'; ctx.fillText('阶段 '+(dg.clash?'终结':duelPhase()),W-20,H-24);
+  if(dg.msgT>0){ ctx.globalAlpha=Math.min(1,dg.msgT/500); ctx.fillStyle='#ffd54a'; ctx.font='bold 20px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(dg.msg,cx,H*0.74); ctx.globalAlpha=1; }
+  ctx.textAlign='left';
   ctx.restore();
 }
 
