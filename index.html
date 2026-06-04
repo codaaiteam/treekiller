@@ -226,6 +226,7 @@ function enterLevel(lv){
 }
 function beginPlay(){
   hide('scLevelIntro');
+  stopScene();              // clean slate: kill any prior loop / pending timers / leftover fx
   const L=LEVELS[G.level-1];
   resize();
   if(L.type==='breakout')startBreakout();
@@ -293,7 +294,9 @@ function drawEffects(){
 // ═══════════════════════════════════════════════════════
 //  SCENE SYSTEM (one minigame per level plugs in here)
 // ═══════════════════════════════════════════════════════
-let scene=null, raf=null, lastT=0;
+let scene=null, raf=null, lastT=0, sceneTimers=[];
+// scene-scoped timeout: auto-cleared by stopScene so stale callbacks never fire after a level switch
+function sceneTimeout(fn,ms){ const id=setTimeout(fn,ms); sceneTimers.push(id); return id; }
 function startLoop(){ if(raf==null){ lastT=performance.now(); raf=requestAnimationFrame(loop); } }
 function loop(t){
   const dt=Math.min(50,(t||performance.now())-(lastT||t||0)); lastT=t||performance.now();
@@ -302,7 +305,12 @@ function loop(t){
   if(scene&&scene.draw) scene.draw();
   raf=requestAnimationFrame(loop);
 }
-function stopScene(){ if(raf!=null){cancelAnimationFrame(raf);raf=null;} unbindInput(); scene=null; }
+function stopScene(){
+  if(raf!=null){cancelAnimationFrame(raf);raf=null;}
+  sceneTimers.forEach(clearTimeout); sceneTimers=[];
+  unbindInput(); scene=null;
+  particles=[]; popups=[]; shake=0;   // clear leftover fx so they don't bleed into the next scene
+}
 // generic input dispatch → active scene
 function _down(e){ if(scene&&scene.onDown) scene.onDown(e); }
 function _move(e){ if(scene&&scene.onMove) scene.onMove(e); }
@@ -371,7 +379,7 @@ function meterHit(){
     mg.done=true;flashGreen();shake=12;
     burst(cx,tipY,'#5bd55b',40);
     popup(cx,tipY-30,'破土！','#5bd55b');
-    setTimeout(()=>{stopScene();levelClear(mg.levelScore+200);},900);
+    sceneTimeout(()=>{stopScene();levelClear(mg.levelScore+200);},900);
   }
 }
 function drawBreakout(){
@@ -528,7 +536,7 @@ function catchUpdate(dt){
   if(cg.you.energy>=CATCH_GOAL && !cg.done){
     cg.done=true; flashGreen(); shake=10;
     burst(cg.you.x,cy,'#5bd55b',40); popup(cg.you.x,cy-30,'光照满了！','#5bd55b');
-    setTimeout(()=>{ stopScene(); levelClear(cg.levelScore+200); },900);
+    sceneTimeout(()=>{ stopScene(); levelClear(cg.levelScore+200); },900);
   }
   // rival-leads taunt (no fail — keep racing)
   if(cg.rival.energy>=CATCH_GOAL && !cg.rivalLed){ cg.rivalLed=true; cg.msg='对手先到顶了！追上它！'; cg.msgT=2200; }
@@ -647,7 +655,7 @@ function swingUpdate(dt){
   // top-2 advance: you only fail if BOTH rivals reach the crown before you
   if(!sg.done && sg.rivals.every(r=>r.h>=sg.goal)){
     sg.done=true;
-    setTimeout(()=>{ stopScene(); levelFail('两个对手都先登顶了 —— 你被甩在了最后。'); },700);
+    sceneTimeout(()=>{ stopScene(); levelFail('两个对手都先登顶了 —— 你被甩在了最后。'); },700);
     return;
   }
   if(sg.msgT>0) sg.msgT-=dt;
@@ -673,7 +681,7 @@ function swingGrab(){
   popup(p.x,p.y-24,label+(inc>0&&sg.combo>1?' x'+sg.combo:''),color);
   if(sg.height>=sg.goal && !sg.done){
     sg.done=true; flashGreen(); shake=12; burst(p.x,p.y,'#5bd55b',40); popup(p.x,p.y-30,'登顶树冠！','#5bd55b');
-    setTimeout(()=>{ stopScene(); levelClear(sg.levelScore+200); },900);
+    sceneTimeout(()=>{ stopScene(); levelClear(sg.levelScore+200); },900);
   }
 }
 function drawSwing(){
@@ -733,13 +741,15 @@ function hgPlayer(){ return { x:W/2, y:H-58 }; }
 function startShoot(){
   document.getElementById('goalWrap').style.display='block';
   document.getElementById('goalLabel').textContent='守住果实 · 撑过 45 秒';
-  document.getElementById('stageHint').innerHTML='移动瞄准、点击/拖动射击 —— 优先打<b>害虫</b>和<b>抢果对手</b>，别让它们碰到果实';
+  document.getElementById('stageHint').innerHTML='移动瞄准、<b>按住可连发</b> —— 优先打<b>害虫</b>和<b>抢果对手</b>，别让它们碰到果实';
   hg={ fruitHP:100, time:HG_TIME, done:false, levelScore:0,
     aimX:W/2, aimY:H*0.4, bullets:[], enemies:[], spawnT:600, spawnGap:1150,
-    cooldown:0, kills:0, t:0, hitFruitFx:0 };
+    cooldown:0, kills:0, t:0, hitFruitFx:0, isFiring:false };
+  const aimAt=(e)=>{ const r=document.getElementById('stage').getBoundingClientRect(); hg.aimX=e.clientX-r.left; hg.aimY=e.clientY-r.top; };
   scene={ update:shootUpdate, draw:drawShoot,
-    onMove:(e)=>{ const r=document.getElementById('stage').getBoundingClientRect(); hg.aimX=e.clientX-r.left; hg.aimY=e.clientY-r.top; },
-    onDown:(e)=>{ const r=document.getElementById('stage').getBoundingClientRect(); hg.aimX=e.clientX-r.left; hg.aimY=e.clientY-r.top; shootFire(); } };
+    onMove:aimAt,
+    onDown:(e)=>{ aimAt(e); hg.isFiring=true; shootFire(); },
+    onUp:()=>{ hg.isFiring=false; } };
   bindInput(); startLoop();
 }
 function shootFire(){
@@ -754,7 +764,7 @@ function spawnEnemy(){
   const r=Math.random();
   let type;
   if(r<0.06) type='gold';
-  else if(r < 0.30+prog*0.35) type='rival';  // more rivals later
+  else if(r < 0.30+prog*0.28) type='rival';  // more rivals later (capped ~0.58 per balance review)
   else type='pest';
   const fromLeft=Math.random()<0.5;
   const x= type==='gold' ? (fromLeft?-20:W+20) : 30+Math.random()*(W-60);
@@ -768,9 +778,19 @@ function shootUpdate(dt){
   if(hg.done) return;
   const f=dt/16; hg.t+=dt; hg.time-=dt; hg.cooldown-=dt; if(hg.hitFruitFx>0)hg.hitFruitFx-=dt;
   const p=hgPlayer();
-  // spawn (ramps up)
+  // time-up wins FIRST (same-frame priority): surviving to 45s shouldn't be stolen by a last-frame hit
+  if(hg.time<=0 && !hg.done){
+    hg.time=0; hg.done=true; flashGreen(); shake=10;
+    popup(p.x,p.y-50,'守住了！','#5bd55b'); burst(p.x,p.y-26,'#5bd55b',40);
+    sceneTimeout(()=>{ stopScene(); levelClear(hg.levelScore+hg.fruitHP*10+200); },900);
+    document.getElementById('goalFill').style.width='100%';
+    return;
+  }
+  // hold-to-fire (drag = continuous fire, gated by cooldown)
+  if(hg.isFiring && hg.cooldown<=0) shootFire();
+  // spawn (ramps up; floor raised per balance review)
   hg.spawnT-=dt;
-  if(hg.spawnT<=0){ spawnEnemy(); hg.spawnT=hg.spawnGap*(0.65+Math.random()*0.7); hg.spawnGap=Math.max(560,hg.spawnGap-9); }
+  if(hg.spawnT<=0){ spawnEnemy(); hg.spawnT=hg.spawnGap*(0.65+Math.random()*0.7); hg.spawnGap=Math.max(650,hg.spawnGap-9); }
   // bullets
   for(let i=hg.bullets.length-1;i>=0;i--){ const b=hg.bullets[i]; b.x+=b.vx*f; b.y+=b.vy*f;
     if(b.x<-30||b.x>W+30||b.y<-30||b.y>H+30){ hg.bullets.splice(i,1); } }
@@ -782,13 +802,14 @@ function shootUpdate(dt){
         const dmg= e.type==='rival'?8:5; hg.fruitHP=Math.max(0,hg.fruitHP-dmg); hg.hitFruitFx=180; shake=5;
         popup(p.x,p.y-44,'-'+dmg,'#e05252'); burst(p.x,p.y-26,'#e05252',8);
         hg.enemies.splice(i,1);
-        if(hg.fruitHP<=0 && !hg.done){ hg.done=true; setTimeout(()=>{ stopScene(); levelFail('果实被啃光了 —— 没守住。'); },600); }
+        if(hg.fruitHP<=0 && !hg.done){ hg.done=true; sceneTimeout(()=>{ stopScene(); levelFail('果实被啃光了 —— 没守住。'); },600); }
         continue;
       }
     }
   }
-  // bullet vs enemy
-  for(let i=hg.enemies.length-1;i>=0;i--){ const e=hg.enemies[i]; const er=e.type==='rival'?16:e.type==='gold'?13:10;
+  // bullet vs enemy (killEnemy(gold) can splice many entries → guard against undefined)
+  for(let i=hg.enemies.length-1;i>=0;i--){ const e=hg.enemies[i]; if(!e) continue;
+    const er=e.type==='rival'?16:e.type==='gold'?13:10;
     for(let j=hg.bullets.length-1;j>=0;j--){ const b=hg.bullets[j];
       if(Math.hypot(b.x-e.x,b.y-e.y)<er+4){ hg.bullets.splice(j,1); e.hp--;
         if(e.hp<=0){ killEnemy(e,i); }
@@ -796,12 +817,9 @@ function shootUpdate(dt){
         break;
       }
     }
+    if(i>hg.enemies.length) i=hg.enemies.length; // resync after a gold mass-clear
   }
-  // win
-  if(hg.time<=0 && !hg.done){ hg.done=true; flashGreen(); shake=10;
-    popup(p.x,p.y-50,'守住了！','#5bd55b'); burst(p.x,p.y-26,'#5bd55b',40);
-    setTimeout(()=>{ stopScene(); levelClear(hg.levelScore + hg.fruitHP*10 + 200); },900);
-  }
+  // (time-up win handled at top of the frame, before damage)
   document.getElementById('goalFill').style.width=Math.min(100,(HG_TIME-hg.time)/HG_TIME*100)+'%';
 }
 function killEnemy(e,i){
@@ -850,7 +868,7 @@ function drawShoot(){
   ctx.fillStyle=hg.fruitHP>40?'#5bd55b':'#e05252'; roundRect(bx,by,bw*hg.fruitHP/100,8,4); ctx.fill();
   ctx.fillStyle='#c0d4b8'; ctx.font='10px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('果实 '+Math.round(hg.fruitHP),p.x,by-5); ctx.textAlign='left';
   // timer + kills
-  ctx.fillStyle='#c0d4b8'; ctx.font='bold 16px "Space Mono",monospace'; ctx.textAlign='left'; ctx.fillText('⏱ '+Math.ceil(hg.time/1000)+'s',20,34);
+  ctx.fillStyle='#c0d4b8'; ctx.font='bold 16px "Space Mono",monospace'; ctx.textAlign='left'; ctx.fillText('⏱ '+Math.ceil(Math.max(0,hg.time)/1000)+'s',20,34);
   ctx.fillStyle='#9ad06a'; ctx.font='12px "Space Mono",monospace'; ctx.fillText('击杀 '+hg.kills,20,54);
   ctx.restore();
 }
