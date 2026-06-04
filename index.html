@@ -82,9 +82,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);overflow:hid
 <div class="screen show" id="scIntro">
   <div class="card">
     <div class="title">THE TREE ARENA</div>
-    <div class="sub">从种子到树冠 · 五关闯关</div>
+    <div class="sub">无尽攀登 · 看你能爬到第几轮</div>
     <div class="lineup" id="lineup"></div>
-    <button class="btn" onclick="enterLevel(1)">开始 Lv1 →</button>
+    <div class="ic-stat" id="introBest" style="margin-bottom:20px"></div>
+    <button class="btn" onclick="startRun()">开始攀登 →</button>
   </div>
 </div>
 
@@ -100,29 +101,47 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);overflow:hid
   </div>
 </div>
 
-<!-- Clear -->
-<div class="screen" id="scClear">
-  <div class="card">
-    <div class="ic-icon" id="clIcon">🌱</div>
-    <div class="ic-lv" id="clLv">LEVEL 1 CLEAR</div>
-    <div class="ic-name" id="clName" style="color:var(--green)">破土成功！</div>
-    <div class="ic-stat">
-      <div><div class="s-v" id="clScore">0</div><div class="s-l">本关得分</div></div>
-      <div><div class="s-v" id="clTotal">0</div><div class="s-l">累计分数</div></div>
-    </div>
-    <div class="ic-how" id="clNext"></div>
-    <button class="btn" id="clBtn" onclick="nextLevel()">进入下一关 →</button>
+<!-- Round banner (endless) -->
+<div class="screen" id="scRound">
+  <div class="card" style="text-align:center;cursor:pointer">
+    <div class="ic-lv">无尽攀登 · ENDLESS</div>
+    <div class="ic-icon" id="rbIcon" style="margin:6px 0">🌳</div>
+    <div class="ic-name" id="rbNum" style="font-size:34px;color:var(--gold)">第 1 轮</div>
+    <div class="ic-name" id="rbMod" style="font-size:16px;margin-top:2px">风和日丽</div>
+    <div class="ic-how" id="rbDesc" style="margin-top:8px"></div>
+    <div style="font-size:9px;color:var(--muted);letter-spacing:2px;opacity:.5;margin-top:14px">点击任意处开始</div>
   </div>
 </div>
 
-<!-- Fail -->
-<div class="screen" id="scFail">
+<!-- Run Over (endless) -->
+<div class="screen" id="scRunOver">
+  <div class="card">
+    <div class="ic-icon">🍂</div>
+    <div class="ic-lv">本轮终结 · YOUR RUN</div>
+    <div class="ic-name" id="roTitle" style="color:var(--gold)">新芽旅人</div>
+    <div class="ic-name" id="roEn" style="font-size:11px;color:var(--muted);letter-spacing:2px;margin-top:-4px">SPROUT</div>
+    <div class="ic-how" id="roMsg" style="margin:8px 0 4px"></div>
+    <div class="ic-stat">
+      <div><div class="s-v" id="roRound">1</div><div class="s-l">爬到第几轮</div></div>
+      <div><div class="s-v" id="roScore">0</div><div class="s-l">本局得分</div></div>
+    </div>
+    <div class="ic-stat" style="margin-top:-6px">
+      <div><div class="s-v" id="roBestR" style="font-size:15px;color:var(--gold)">0</div><div class="s-l">最高轮</div></div>
+      <div><div class="s-v" id="roBestS" style="font-size:15px;color:var(--gold)">0</div><div class="s-l">最高分</div></div>
+    </div>
+    <div class="ic-how" id="roNext" style="color:var(--green);margin-bottom:20px"></div>
+    <button class="btn" onclick="startRun()">再爬一次 →</button>
+  </div>
+</div>
+
+<!-- (unused legacy fail card, kept hidden) -->
+<div class="screen" id="scFail" style="display:none!important">
   <div class="card">
     <div class="ic-icon">🥀</div>
-    <div class="ic-lv" id="faLv" style="color:var(--red)">LEVEL FAILED</div>
-    <div class="ic-name" id="faName" style="color:var(--red)">没追上</div>
+    <div class="ic-lv" id="faLv">—</div>
+    <div class="ic-name" id="faName">—</div>
     <div class="ic-how" id="faMsg"></div>
-    <button class="btn" onclick="retryLevel()">重试本关 →</button>
+    <button class="btn" onclick="startRun()">再来 →</button>
   </div>
 </div>
 
@@ -176,7 +195,39 @@ const LEVELS=[
    ready:true},
 ];
 
-let G={level:1,score:0,unlocked:1};
+let G={round:1,level:1,score:0,diff:1,modifier:null,perf:null,
+  bestRound:+(localStorage.getItem('ta_bestRound')||0),
+  bestScore:+(localStorage.getItem('ta_bestScore')||0)};
+
+// ── Endless: difficulty soft-cap (per ChatGPT: 1 + ln(round)*0.4, never crashes) ──
+function gDiff(){ return 1 + Math.log(G.round)*0.4; }   // R1=1.0 R5=1.6 R10=1.9 R20=2.2 R50=2.6
+function modId(){ return G.modifier?G.modifier.id:'none'; }
+
+// ── Per-round 天象 Modifier (anti-staleness: same minigame, different conditions) ──
+const MODIFIERS=[
+  {id:'none',   name:'风和日丽', icon:'🌤', desc:'平稳的一轮'},
+  {id:'windy',  name:'大风',     icon:'🌬', desc:'够阳光的阳光会被吹偏'},
+  {id:'swarm',  name:'虫潮',     icon:'🐛', desc:'护果关害虫大量增加'},
+  {id:'harvest',name:'金阳丰收', icon:'✨', desc:'够阳光关金阳光更多'},
+  {id:'barren', name:'贫土',     icon:'🏜', desc:'破土绿区更小、藤摆更快'},
+  {id:'rage',   name:'狂暴树冠', icon:'👹', desc:'夺冠关 Boss 更快更凶'},
+];
+function pickModifier(round){
+  if(round<=1) return MODIFIERS[0];                 // first round is calm
+  if(Math.random()<0.22) return MODIFIERS[0];
+  return MODIFIERS[1+Math.floor(Math.random()*(MODIFIERS.length-1))];
+}
+// ── End-of-run Title (screenshot-worthy, per ChatGPT) ──
+const TITLES=[
+  {test:()=>G.round>=12,                       name:'古树之灵',  en:'ANCIENT OAK'},
+  {test:()=>G.round>=8,                        name:'风暴树冠',  en:'STORM CROWN'},
+  {test:()=>G.perf&&G.perf.bossNoHit&&G.round>=4,name:'无瑕守冠者',en:'FLAWLESS CROWN'},
+  {test:()=>G.perf&&G.perf.kills>=40,          name:'荆棘冠军',  en:'THORN CHAMPION'},
+  {test:()=>G.perf&&G.perf.sun>=60,            name:'太阳追猎者',en:'SUN CHASER'},
+  {test:()=>G.perf&&G.perf.vineCombo>=8,       name:'藤蔓舞者',  en:'VINE DANCER'},
+  {test:()=>true,                              name:'新芽旅人',  en:'SPROUT WANDERER'},
+];
+function pickTitle(){ return TITLES.find(t=>t.test()); }
 
 // ═══════════════════════════════════════════════════════
 //  DOM / CANVAS
@@ -189,84 +240,84 @@ window.addEventListener('resize',()=>{resize();});
 // ═══════════════════════════════════════════════════════
 //  SHELL
 // ═══════════════════════════════════════════════════════
-function show(id){document.getElementById(id).classList.add('show');}
-function hide(id){document.getElementById(id).classList.remove('show');}
+function show(id){const e=document.getElementById(id);if(e)e.classList.add('show');}
+function hide(id){const e=document.getElementById(id);if(e)e.classList.remove('show');}
 function renderLineup(){
-  document.getElementById('lineup').innerHTML=LEVELS.map(L=>{
-    const locked=L.lv>G.unlocked;
-    const cur=L.lv===G.level&&!locked;
-    return`<div class="lvrow ${locked?'locked':''} ${cur?'current':''}">
+  document.getElementById('lineup').innerHTML=LEVELS.map(L=>
+    `<div class="lvrow">
       <div class="lv-ic">${L.icon}</div>
-      <div class="lv-meta"><div class="lv-name"><span class="lvnum">Lv${L.lv}</span>${L.name}${!L.ready?' <span style="color:var(--muted);font-size:9px">· 开发中</span>':''}</div><div class="lv-desc">${L.goal}</div></div>
+      <div class="lv-meta"><div class="lv-name"><span class="lvnum">Lv${L.lv}</span>${L.name}</div><div class="lv-desc">${L.goal}</div></div>
       <div class="lv-rivals">${L.rivals?('对手 ×'+L.rivals):'独自'}</div>
-    </div>`;
-  }).join('');
+    </div>`).join('');
+  document.getElementById('introBest').innerHTML = (G.bestRound>0)
+    ? `<div><div class="s-v" style="color:var(--gold)">${G.bestRound}</div><div class="s-l">最高轮</div></div><div><div class="s-v" style="color:var(--gold)">${G.bestScore}</div><div class="s-l">最高分</div></div>`
+    : '<div style="font-size:11px;color:var(--muted)">5 个小游戏循环成一轮，越爬越快、每轮天象不同。失败即结束。</div>';
 }
 function renderHUD(){
   const L=LEVELS[G.level-1];
-  document.getElementById('lvlBadge').textContent=`Lv${L.lv} ${L.name}`;
+  const m=G.modifier&&G.modifier.id!=='none'?(' · '+G.modifier.icon+G.modifier.name):'';
+  document.getElementById('lvlBadge').textContent=`第${G.round}轮 Lv${L.lv} ${L.name}${m}`;
   document.getElementById('hudScore').textContent=G.score;
   document.getElementById('hudPath').innerHTML=LEVELS.map(x=>`<div class="pnode ${x.lv<G.level?'done':x.lv===G.level?'now':''}"></div>`).join('');
 }
 
-function enterLevel(lv){
-  G.level=lv;
-  const L=LEVELS[lv-1];
-  hide('scIntro');hide('scClear');
-  document.getElementById('liIcon').textContent=L.icon;
-  document.getElementById('liLv').textContent='LEVEL '+lv;
-  document.getElementById('liName').textContent=L.name;
-  document.getElementById('liGoal').textContent=L.goal;
-  document.getElementById('liHow').innerHTML=L.how.replace(/\n/g,'<br>');
-  document.getElementById('liBtn').textContent=L.ready?'开始 →':'敬请期待';
-  document.getElementById('liBtn').disabled=!L.ready;
-  document.getElementById('liBtn').style.opacity=L.ready?'1':'.4';
-  renderHUD();
-  show('scLevelIntro');
+// ── ENDLESS FLOW: Round = Lv1→Lv5; clear all 5 → next round (harder + new 天象); fail = run over ──
+function startRun(){
+  G.round=1; G.level=1; G.score=0;
+  G.perf={sun:0,vineCombo:0,kills:0,fruitMin:100,bossNoHit:true};
+  ['scIntro','scRunOver','scFail','scClear','scLevelIntro'].forEach(hide);
+  beginRound();
+}
+function beginRound(){
+  G.level=1; G.diff=gDiff(); G.modifier=pickModifier(G.round);
+  showRoundBanner(()=>beginPlay());
 }
 function beginPlay(){
-  hide('scLevelIntro');
-  stopScene();              // clean slate: kill any prior loop / pending timers / leftover fx
-  const L=LEVELS[G.level-1];
-  resize();
+  stopScene();
+  const L=LEVELS[G.level-1]; resize();
   if(L.type==='breakout')startBreakout();
   else if(L.type==='catch')startCatch();
   else if(L.type==='swing')startSwing();
   else if(L.type==='shoot')startShoot();
   else if(L.type==='boss')startDuel();
+  renderHUD();
 }
 function levelClear(levelScore){
   G.score+=levelScore;
-  if(G.level+1>G.unlocked)G.unlocked=G.level+1;
-  const L=LEVELS[G.level-1],N=LEVELS[G.level];
-  document.getElementById('clIcon').textContent=N?N.icon:'👑';
-  document.getElementById('clLv').textContent='LEVEL '+G.level+' CLEAR';
-  document.getElementById('clName').textContent=L.name+' 通关！';
-  document.getElementById('clScore').textContent=levelScore;
-  document.getElementById('clTotal').textContent=G.score;
-  if(N){
-    document.getElementById('clNext').innerHTML=`下一关 <b style="color:var(--gold)">Lv${N.lv} ${N.name}</b> — ${N.goal}${N.ready?'':'<br><span style="color:var(--muted)">（开发中，敬请期待）</span>'}`;
-    document.getElementById('clBtn').textContent=N.ready?'进入下一关 →':'返回关卡地图';
-  }else{
-    document.getElementById('clNext').textContent='你已登顶树冠。';
-    document.getElementById('clBtn').textContent='返回';
-  }
-  renderHUD();
-  show('scClear');
+  document.getElementById('hudScore').textContent=G.score;
+  if(G.level<5){ G.level++; setTimeout(()=>beginPlay(),450); }   // next minigame, fast flow
+  else { G.round++; beginRound(); }                              // round done → next round
 }
-function nextLevel(){
-  const N=LEVELS[G.level];
-  hide('scClear');
-  if(N&&N.ready)enterLevel(G.level+1);
-  else{renderLineup();show('scIntro');}
+function levelFail(msg){ endRun(msg); }
+function endRun(msg){
+  stopScene();
+  const newBestR=G.round>G.bestRound, newBestS=G.score>G.bestScore;
+  if(newBestR){ G.bestRound=G.round; try{localStorage.setItem('ta_bestRound',G.round);}catch(e){} }
+  if(newBestS){ G.bestScore=G.score; try{localStorage.setItem('ta_bestScore',G.score);}catch(e){} }
+  const t=pickTitle();
+  document.getElementById('roTitle').textContent=t.name;
+  document.getElementById('roEn').textContent=t.en;
+  document.getElementById('roRound').textContent=G.round;
+  document.getElementById('roScore').textContent=G.score;
+  document.getElementById('roBestR').textContent=G.bestRound;
+  document.getElementById('roBestS').textContent=G.bestScore;
+  document.getElementById('roMsg').textContent=msg||'';
+  document.getElementById('roNext').innerHTML = (newBestR&&G.round>1)
+    ? '🏆 新纪录！爬到了第 '+G.round+' 轮'
+    : '下个目标：超过第 '+G.bestRound+' 轮';
+  show('scRunOver');
 }
-function levelFail(msg){
-  const L=LEVELS[G.level-1];
-  document.getElementById('faLv').textContent='LEVEL '+G.level+' FAILED';
-  document.getElementById('faMsg').textContent=msg||'再试一次';
-  show('scFail');
+// round banner (auto-advance ~2.4s or click)
+function showRoundBanner(onDone){
+  const m=G.modifier;
+  document.getElementById('rbIcon').textContent = (m&&m.icon)?m.icon:'🌳';
+  document.getElementById('rbNum').textContent='第 '+G.round+' 轮';
+  document.getElementById('rbMod').textContent=(m&&m.id!=='none')?('本轮天象 · '+m.name):'风和日丽';
+  document.getElementById('rbDesc').innerHTML=((m&&m.id!=='none')?m.desc+'<br>':'')+'难度 ×'+G.diff.toFixed(2)+(G.round>1?'　·　越爬越快':'　·　从这里开始攀登');
+  const el=document.getElementById('scRound'); el.classList.add('show');
+  const go=()=>{ clearTimeout(el._rt); el.onclick=null; el.classList.remove('show'); if(onDone)onDone(); };
+  el.onclick=go; clearTimeout(el._rt); el._rt=setTimeout(go,2400);
 }
-function retryLevel(){ hide('scFail'); beginPlay(); }
 
 // ═══════════════════════════════════════════════════════
 //  EFFECTS
@@ -340,7 +391,8 @@ function startBreakout(){
   document.getElementById('goalWrap').style.display='block';
   document.getElementById('goalLabel').textContent='破土进度';
   document.getElementById('stageHint').innerHTML='白线扫到<b>绿区</b>时，点击屏幕 / 空格';
-  mg={ progress:0, levelScore:0, meterPos:0.5, meterDir:1, meterSpeed:0.011, sweetCenter:0.5, sweetHalf:0.22, combo:0, best:0, done:false };
+  const baseHalf=modId()==='barren'?0.16:0.22;
+  mg={ progress:0, levelScore:0, meterPos:0.5, meterDir:1, meterSpeed:0.011*G.diff, sweetCenter:0.5, sweetHalf:baseHalf, baseHalf, combo:0, best:0, done:false };
   scene={ update:breakoutUpdate, draw:drawBreakout,
     onDown:()=>meterHit(),
     onKey:(e)=>{ if(e.code==='Space'){ e.preventDefault(); meterHit(); } } };
@@ -376,8 +428,8 @@ function meterHit(){
   else{burst(cx,tipY,color,6);shake=4;}
   popup(cx,tipY-20,label+(mg.combo>1&&gain>0?' x'+mg.combo:''),color);
   // difficulty: zone stays CENTERED, shrinks gently, cursor speeds up gradually
-  mg.sweetHalf=Math.max(0.13,0.22-0.09*(mg.progress/100));
-  mg.meterSpeed=0.011+0.013*(mg.progress/100);
+  mg.sweetHalf=Math.max(0.10,mg.baseHalf-0.09*(mg.progress/100));
+  mg.meterSpeed=(0.011+0.013*(mg.progress/100))*G.diff;
   document.getElementById('hudScore').textContent=G.score+mg.levelScore;
   if(mg.progress>=100&&!mg.done){
     mg.done=true;flashGreen();shake=12;
@@ -480,9 +532,10 @@ function startCatch(){
   document.getElementById('stageHint').innerHTML='移动鼠标 / <b>A·D</b>·←→ 左右移动，接住<b>阳光</b>';
   cg={
     you:{x:W*0.55, energy:0, combo:0, best:0, shield:0, speedB:0},
-    rival:{x:W*0.3, energy:0, tx:W*0.3, retarget:0, speed:0.16},
-    orbs:[], spawnT:400, spawnGap:780, done:false, levelScore:0,
+    rival:{x:W*0.3, energy:0, tx:W*0.3, retarget:0, speed:0.16*G.diff},
+    orbs:[], spawnT:400, spawnGap:780/G.diff, done:false, levelScore:0,
     keyL:false, keyR:false, t:0, rivalLed:false, msg:'', msgT:0,
+    windy:modId()==='windy',
   };
   scene={ update:catchUpdate, draw:drawCatch,
     onMove:(e)=>{ const r=document.getElementById('stage').getBoundingClientRect(); cg.you.x=Math.max(24,Math.min(W-24,e.clientX-r.left)); },
@@ -492,9 +545,11 @@ function startCatch(){
 }
 function spawnOrb(){
   const r=Math.random();
-  const type = r<0.70?'small' : r<0.92?'big' : 'gold';
-  const vy = type==='small'?2.4 : type==='big'?1.7 : 1.5;
-  cg.orbs.push({ x:40+Math.random()*(W-80), y:-20, vy, type });
+  const goldP=modId()==='harvest'?0.22:0.08;  // 金阳丰收 → more gold
+  const type = r<goldP?'gold' : r<goldP+0.22?'big' : 'small';
+  const vy = (type==='small'?2.4 : type==='big'?1.7 : 1.5)*G.diff;
+  const vx = cg.windy ? (Math.random()-0.5)*1.6*G.diff : 0;   // 大风 → horizontal drift
+  cg.orbs.push({ x:40+Math.random()*(W-80), y:-20, vy, vx, type });
 }
 function catchUpdate(dt){
   if(cg.done) return;
@@ -528,7 +583,7 @@ function catchUpdate(dt){
   // orbs fall + catch resolution
   const cy=catchY();
   for(let i=cg.orbs.length-1;i>=0;i--){
-    const o=cg.orbs[i]; o.y+=o.vy*f;
+    const o=cg.orbs[i]; o.y+=o.vy*f; if(o.vx){ o.x+=o.vx*f; if(o.x<20||o.x>W-20)o.vx*=-1; }
     if(o.y>=cy){
       const dy=Math.abs(o.x-cg.you.x), dr=Math.abs(o.x-cg.rival.x);
       if(dy<30 && dy<=dr){ catchByYou(o); cg.orbs.splice(i,1); continue; }
@@ -549,6 +604,7 @@ function catchUpdate(dt){
 }
 function catchByYou(o){
   const v=orbVal(o); cg.you.energy+=v; cg.you.combo++; cg.you.best=Math.max(cg.you.best,cg.you.combo);
+  if(G.perf)G.perf.sun+=v;
   if(cg.you.combo===3) cg.you.speedB=0.12;
   if(cg.you.combo===5) cg.you.shield=1;
   const col=o.type==='gold'?'#ffd54a':o.type==='big'?'#ffe08a':'#fff2b0';
@@ -630,8 +686,9 @@ function startSwing(){
   document.getElementById('goalWrap').style.display='block';
   document.getElementById('goalLabel').textContent='攀爬高度（目标 '+SWING_GOAL+'）';
   document.getElementById('stageHint').innerHTML='荡到<b>弧线顶端</b>（出现"▲ 甩!"）时点击 / 空格 甩藤上爬';
-  sg={ height:0, goal:SWING_GOAL, phase:0, speed:0.009, combo:0, best:0, levelScore:0, done:false,
-    rivals:[{name:'甲',color:'#d98a8a',h:0,t:900,interval:620},{name:'乙',color:'#7fa8d4',h:0,t:1050,interval:720}],
+  const sMul=G.diff*(modId()==='barren'?1.2:1);
+  sg={ height:0, goal:SWING_GOAL, phase:0, speed:0.009*sMul, sMul, combo:0, best:0, levelScore:0, done:false,
+    rivals:[{name:'甲',color:'#d98a8a',h:0,t:900,interval:620/G.diff},{name:'乙',color:'#7fa8d4',h:0,t:1050,interval:720/G.diff}],
     msg:'', msgT:0 };
   scene={ update:swingUpdate, draw:drawSwing,
     onDown:()=>swingGrab(),
@@ -647,7 +704,7 @@ function bobPos(){
 function swingUpdate(dt){
   if(sg.done) return;
   sg.phase=(sg.phase+sg.speed*(dt/16))%1;
-  sg.speed=0.009+0.007*(sg.height/sg.goal);
+  sg.speed=(0.009+0.007*(sg.height/sg.goal))*sg.sMul;
   sg.rivals.forEach(r=>{
     r.t-=dt;
     if(r.t<=0){
@@ -674,7 +731,7 @@ function swingGrab(){
   if(v<0.22){ inc=2; label='Perfect!'; color='#5bd55b'; sg.combo++; }
   else if(v<0.55){ inc=1; label='Nice!'; color='#4caf78'; sg.combo++; }   // forgiving: most taps near an apex count
   else{ inc=0; label='荡到顶端再点!'; color='#e0a052'; sg.combo=0; }        // only the fast middle is a miss
-  sg.best=Math.max(sg.best,sg.combo);
+  sg.best=Math.max(sg.best,sg.combo); if(G.perf)G.perf.vineCombo=Math.max(G.perf.vineCombo,sg.combo);
   const p=bobPos();
   if(inc>0){
     const before=sg.height;
@@ -751,7 +808,8 @@ function startShoot(){
   document.getElementById('goalLabel').textContent='守住果实 · 撑过 45 秒';
   document.getElementById('stageHint').innerHTML='移动瞄准、<b>按住可连发</b> —— 优先打<b>害虫</b>和<b>抢果对手</b>，别让它们碰到果实';
   hg={ fruitHP:100, time:HG_TIME, done:false, levelScore:0,
-    aimX:W/2, aimY:H*0.4, bullets:[], enemies:[], spawnT:600, spawnGap:1150,
+    aimX:W/2, aimY:H*0.4, bullets:[], enemies:[], spawnT:600,
+    spawnGap:(modId()==='swarm'?720:1150)/G.diff,   // 虫潮 → much faster spawns
     cooldown:0, kills:0, t:0, hitFruitFx:0, isFiring:false };
   const aimAt=(e)=>{ const r=document.getElementById('stage').getBoundingClientRect(); hg.aimX=e.clientX-r.left; hg.aimY=e.clientY-r.top; };
   scene={ update:shootUpdate, draw:drawShoot,
@@ -779,7 +837,7 @@ function spawnEnemy(){
   const y= type==='gold' ? 60+Math.random()*120 : -20;
   const e={ x, y, type, hp: type==='rival'?2:1 };
   if(type==='gold'){ e.vx=(fromLeft?1:-1)*2.4; e.vy=0; }
-  else { e.vx=0; e.vy=0; e.spd= type==='rival'?0.9:1.4; }
+  else { e.vx=0; e.vy=0; e.spd=(type==='rival'?0.9:1.4)*G.diff; }
   hg.enemies.push(e);
 }
 function shootUpdate(dt){
@@ -798,7 +856,7 @@ function shootUpdate(dt){
   if(hg.isFiring && hg.cooldown<=0) shootFire();
   // spawn (ramps up; floor raised per balance review)
   hg.spawnT-=dt;
-  if(hg.spawnT<=0){ spawnEnemy(); hg.spawnT=hg.spawnGap*(0.65+Math.random()*0.7); hg.spawnGap=Math.max(650,hg.spawnGap-9); }
+  if(hg.spawnT<=0){ spawnEnemy(); hg.spawnT=hg.spawnGap*(0.65+Math.random()*0.7); hg.spawnGap=Math.max(modId()==='swarm'?440:650/G.diff,hg.spawnGap-9); }
   // bullets
   for(let i=hg.bullets.length-1;i>=0;i--){ const b=hg.bullets[i]; b.x+=b.vx*f; b.y+=b.vy*f;
     if(b.x<-30||b.x>W+30||b.y<-30||b.y>H+30){ hg.bullets.splice(i,1); } }
@@ -807,7 +865,7 @@ function shootUpdate(dt){
     if(e.type==='gold'){ e.x+=e.vx*f; if(e.x<-40||e.x>W+40){ hg.enemies.splice(i,1); continue; } }
     else { let dx=p.x-e.x, dy=(p.y-26)-e.y; const d=Math.hypot(dx,dy)||1; e.x+=dx/d*e.spd*f; e.y+=dy/d*e.spd*f;
       if(d<30){ // reached fruit → attack
-        const dmg= e.type==='rival'?8:5; hg.fruitHP=Math.max(0,hg.fruitHP-dmg); hg.hitFruitFx=180; shake=5;
+        const dmg= e.type==='rival'?8:5; hg.fruitHP=Math.max(0,hg.fruitHP-dmg); if(G.perf)G.perf.fruitMin=Math.min(G.perf.fruitMin,hg.fruitHP); hg.hitFruitFx=180; shake=5;
         popup(p.x,p.y-44,'-'+dmg,'#e05252'); burst(p.x,p.y-26,'#e05252',8);
         hg.enemies.splice(i,1);
         if(hg.fruitHP<=0 && !hg.done){ hg.done=true; sceneTimeout(()=>{ stopScene(); levelFail('果实被啃光了 —— 没守住。'); },600); }
@@ -831,7 +889,7 @@ function shootUpdate(dt){
   document.getElementById('goalFill').style.width=Math.min(100,(HG_TIME-hg.time)/HG_TIME*100)+'%';
 }
 function killEnemy(e,i){
-  hg.enemies.splice(i,1); hg.kills++;
+  hg.enemies.splice(i,1); hg.kills++; if(G.perf)G.perf.kills++;
   if(e.type==='gold'){ // gold = clear all pests + big score
     let cleared=0; for(let k=hg.enemies.length-1;k>=0;k--){ if(hg.enemies[k].type!=='gold'){ burst(hg.enemies[k].x,hg.enemies[k].y,'#ffd54a',8); hg.enemies.splice(k,1); cleared++; } }
     hg.levelScore+=200+cleared*20; flashGreen(); shake=8; popup(e.x,e.y-16,'金虫！全清','#ffd54a');
@@ -897,14 +955,17 @@ function startDuel(){
 }
 function spawnPrompt(){
   const ph=DUEL_PHASES[duelPhase()];
-  dg.prompt={ type: Math.random()<ph.gold?'gold':'red', p:0, speed:ph.speed, window:ph.window, hit:0.82, resolved:false, fade:0 };
+  const rage=modId()==='rage';
+  const spd=ph.speed*G.diff*(rage?1.25:1);
+  const goldP=ph.gold+(rage?0.12:0);
+  dg.prompt={ type: Math.random()<goldP?'gold':'red', p:0, speed:spd, window:ph.window, hit:0.82, resolved:false, fade:0 };
 }
 function duelHitPlayer(){
-  dg.hearts--; dg.hitFx=300; shake=8;
+  dg.hearts--; dg.hitFx=300; shake=8; if(G.perf)G.perf.bossNoHit=false;
   popup(W/2,H*0.6,'受伤 -1','#e05252'); burst(W/2,H*0.42,'#e05252',16);
   if(dg.hearts<=0 && !dg.done){ dg.done=true; sceneTimeout(()=>{ stopScene(); levelFail('你倒在了树冠之下 —— 再来一次。'); },800); }
 }
-function startClash(){ dg.prompt=null; dg.gapT=0; dg.clash={ pos:0, dir:1, speed:0.02, sweetC:0.5, sweetH:0.15 }; dg.msg='最终对决！点击绿区终结它'; dg.msgT=2200; }
+function startClash(){ dg.prompt=null; dg.gapT=0; dg.clash={ pos:0, dir:1, speed:0.02*G.diff, sweetC:0.5, sweetH:Math.max(0.10,0.15/Math.sqrt(G.diff)) }; dg.msg='最终对决！点击绿区终结它'; dg.msgT=2200; }
 function duelUpdate(dt){
   if(dg.done) return;
   dg.t+=dt; if(dg.msgT>0)dg.msgT-=dt; if(dg.hitFx>0)dg.hitFx-=dt; if(dg.bossFx>0)dg.bossFx-=dt;
