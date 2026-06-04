@@ -630,7 +630,7 @@ function startSwing(){
   document.getElementById('goalWrap').style.display='block';
   document.getElementById('goalLabel').textContent='攀爬高度（目标 '+SWING_GOAL+'）';
   document.getElementById('stageHint').innerHTML='荡到<b>弧线顶端</b>（出现"▲ 甩!"）时点击 / 空格 甩藤上爬';
-  sg={ height:0, goal:SWING_GOAL, phase:0, speed:0.012, combo:0, best:0, levelScore:0, done:false,
+  sg={ height:0, goal:SWING_GOAL, phase:0, speed:0.009, combo:0, best:0, levelScore:0, done:false,
     rivals:[{name:'甲',color:'#d98a8a',h:0,t:900,interval:620},{name:'乙',color:'#7fa8d4',h:0,t:1050,interval:720}],
     msg:'', msgT:0 };
   scene={ update:swingUpdate, draw:drawSwing,
@@ -639,13 +639,15 @@ function startSwing(){
   bindInput(); startLoop();
 }
 function bobPos(){
-  const cx=W*0.4, ay=H*0.26, rope=H*0.36, ang=1.0*Math.sin(sg.phase*Math.PI*2);
+  const cx=W*0.4;
+  // anchor rises as you climb → you visibly ascend the screen over the level
+  const ay=H*0.50 - (sg.height/sg.goal)*(H*0.30), rope=H*0.30, ang=1.0*Math.sin(sg.phase*Math.PI*2);
   return { x:cx+Math.sin(ang)*rope, y:ay+Math.cos(ang)*rope, cx, ay, rope };
 }
 function swingUpdate(dt){
   if(sg.done) return;
   sg.phase=(sg.phase+sg.speed*(dt/16))%1;
-  sg.speed=0.012+0.010*(sg.height/sg.goal);
+  sg.speed=0.009+0.007*(sg.height/sg.goal);
   sg.rivals.forEach(r=>{
     r.t-=dt;
     if(r.t<=0){
@@ -667,22 +669,24 @@ function swingUpdate(dt){
 }
 function swingGrab(){
   if(!sg||sg.done) return;
-  const v=Math.abs(Math.cos(sg.phase*Math.PI*2)); // 0 at apex, 1 at bottom
+  const v=Math.abs(Math.cos(sg.phase*Math.PI*2)); // 0 at apex (top of arc), 1 at bottom (fastest)
   let inc,label,color;
-  if(v<0.12){ inc=2; label='Perfect Swing!'; color='#5bd55b'; sg.combo++; }
-  else if(v<0.30){ inc=1; label='Nice!'; color='#4caf78'; sg.combo++; }
-  else{ inc=0; label='Miss'; color='#e0a052'; sg.combo=0; }
+  if(v<0.22){ inc=2; label='Perfect!'; color='#5bd55b'; sg.combo++; }
+  else if(v<0.55){ inc=1; label='Nice!'; color='#4caf78'; sg.combo++; }   // forgiving: most taps near an apex count
+  else{ inc=0; label='荡到顶端再点!'; color='#e0a052'; sg.combo=0; }        // only the fast middle is a miss
   sg.best=Math.max(sg.best,sg.combo);
   const p=bobPos();
   if(inc>0){
     const before=sg.height;
     sg.height=Math.min(sg.goal,sg.height+inc);
     sg.levelScore+=(inc===2?120:60)+(sg.combo>1?sg.combo*6:0);
-    burst(p.x,p.y,color,inc===2?22:10); shake=inc===2?6:3;
+    // strong upward "climbed!" feedback: radial burst + upward streaks
+    burst(p.x,p.y,color,inc===2?24:14); shake=inc===2?7:4;
+    for(let i=0;i<(inc===2?10:6);i++){ particles.push({x:p.x+(Math.random()-0.5)*20,y:p.y,vx:(Math.random()-0.5)*2,vy:-3-Math.random()*4,life:1,color}); }
     sg.rivals.forEach(r=>{ if(before<=r.h && sg.height>r.h){ sg.msg='超车 '+r.name+'!'; sg.msgT=1400; } });
     document.getElementById('hudScore').textContent=G.score+sg.levelScore;
-  } else { shake=3; }
-  popup(p.x,p.y-24,label+(inc>0&&sg.combo>1?' x'+sg.combo:''),color);
+  } else { shake=4; }
+  popup(p.x,p.y-26,(inc===2?'↑ ':inc===1?'↑ ':'')+label+(inc>0&&sg.combo>1?' x'+sg.combo:''),color);
   if(sg.height>=sg.goal && !sg.done){
     sg.done=true; flashGreen(); shake=12; burst(p.x,p.y,'#5bd55b',40); popup(p.x,p.y-30,'登顶树冠！','#5bd55b');
     sceneTimeout(()=>{ stopScene(); levelClear(sg.levelScore+200); },900);
@@ -704,7 +708,7 @@ function drawSwing(){
   const vNow=Math.abs(Math.cos(sg.phase*Math.PI*2));
   [-1,1].forEach(s=>{
     const zx=b.cx+Math.sin(1.0*s)*b.rope, zy=b.ay+Math.cos(1.0*s)*b.rope;
-    const near=(sgn===s)&&vNow<0.30;
+    const near=(sgn===s)&&vNow<0.55;
     ctx.strokeStyle=near?'rgba(91,213,91,.9)':'rgba(76,175,120,.28)';
     ctx.lineWidth=near?3:1.5; ctx.beginPath(); ctx.arc(zx,zy,16,0,Math.PI*2); ctx.stroke();
   });
@@ -715,7 +719,7 @@ function drawSwing(){
   ctx.save(); ctx.shadowColor='#4caf78'; ctx.shadowBlur=10; ctx.fillStyle='#4caf78';
   ctx.beginPath(); ctx.arc(b.x,b.y,13,0,Math.PI*2); ctx.fill(); ctx.restore();
   ctx.fillStyle='#0a180a'; ctx.font='bold 11px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('你',b.x,b.y+4);
-  if(vNow<0.30&&!sg.done){ const pulse=.55+.45*Math.abs(Math.sin(Date.now()/100)); ctx.globalAlpha=pulse; ctx.fillStyle='#5bd55b'; ctx.font='bold 22px "Space Mono",monospace'; ctx.fillText('▲ 甩!',b.x,b.y-30); ctx.globalAlpha=1; }
+  if(vNow<0.55&&!sg.done){ const pulse=.55+.45*Math.abs(Math.sin(Date.now()/100)); ctx.globalAlpha=pulse; ctx.fillStyle='#5bd55b'; ctx.font='bold 22px "Space Mono",monospace'; ctx.fillText('▲ 甩!',b.x,b.y-30); ctx.globalAlpha=1; }
   drawEffects();
   drawClimbRuler();
   if(sg.combo>1){ ctx.fillStyle='#5bd55b'; ctx.font='bold 15px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('连击 x'+sg.combo,b.cx,H-40); }
