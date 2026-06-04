@@ -149,8 +149,8 @@ const LEVELS=[
    ready:true},
   {lv:2,icon:'🌱',name:'够阳光',type:'catch',rivals:1,
    goal:'接住飘落的阳光，集满光照',
-   how:'左右移动你的嫩芽接住阳光。\n出现一个对手，它抢走的光，你就拿不到。',
-   ready:false},
+   how:'移动鼠标（或 <b>A·D</b>、←→）左右移动你的嫩芽，接住飘落的阳光。\n小阳光+1、大阳光+3、金阳光+5；连续接住有连击加成。\n一个对手也在抢，它接走的光你就拿不到。先攒满 20 能量过关。',
+   ready:true},
   {lv:3,icon:'🌿',name:'荡藤',type:'swing',rivals:2,
    goal:'荡藤攀爬到目标高度',
    how:'点击甩出藤蔓，抓住更高的枝节往上爬。\n两个对手并排和你竞速。',
@@ -218,6 +218,7 @@ function beginPlay(){
   const L=LEVELS[G.level-1];
   resize();
   if(L.type==='breakout')startBreakout();
+  else if(L.type==='catch')startCatch();
 }
 function levelClear(levelScore){
   G.score+=levelScore;
@@ -269,22 +270,57 @@ function drawEffects(){
 // ═══════════════════════════════════════════════════════
 //  LEVEL 1 — 破土 (timing power meter)
 // ═══════════════════════════════════════════════════════
-let mg=null,raf=null;
+// ═══════════════════════════════════════════════════════
+//  SCENE SYSTEM (one minigame per level plugs in here)
+// ═══════════════════════════════════════════════════════
+let scene=null, raf=null, lastT=0;
+function startLoop(){ if(raf==null){ lastT=performance.now(); raf=requestAnimationFrame(loop); } }
+function loop(t){
+  const dt=Math.min(50,(t||performance.now())-(lastT||t||0)); lastT=t||performance.now();
+  if(scene&&scene.update) scene.update(dt);
+  stepEffects();
+  if(scene&&scene.draw) scene.draw();
+  raf=requestAnimationFrame(loop);
+}
+function stopScene(){ if(raf!=null){cancelAnimationFrame(raf);raf=null;} unbindInput(); scene=null; }
+// generic input dispatch → active scene
+function _down(e){ if(scene&&scene.onDown) scene.onDown(e); }
+function _move(e){ if(scene&&scene.onMove) scene.onMove(e); }
+function _up(e){ if(scene&&scene.onUp) scene.onUp(e); }
+function _key(e){ if(scene&&scene.onKey) scene.onKey(e); }
+function _keyup(e){ if(scene&&scene.onKeyUp) scene.onKeyUp(e); }
+function bindInput(){
+  const s=document.getElementById('stage');
+  s.addEventListener('pointerdown',_down); s.addEventListener('pointermove',_move); s.addEventListener('pointerup',_up);
+  window.addEventListener('keydown',_key); window.addEventListener('keyup',_keyup);
+}
+function unbindInput(){
+  const s=document.getElementById('stage');
+  s.removeEventListener('pointerdown',_down); s.removeEventListener('pointermove',_move); s.removeEventListener('pointerup',_up);
+  window.removeEventListener('keydown',_key); window.removeEventListener('keyup',_keyup);
+}
+
+// ═══════════════════════════════════════════════════════
+//  LEVEL 1 — 破土 (timing power meter)
+// ═══════════════════════════════════════════════════════
+let mg=null;
 function startBreakout(){
   document.getElementById('goalWrap').style.display='block';
   document.getElementById('goalLabel').textContent='破土进度';
   document.getElementById('stageHint').innerHTML='白线扫到<b>绿区</b>时，点击屏幕 / 空格';
-  mg={
-    progress:0,           // 0..100 toward surface
-    levelScore:0,
-    meterPos:0.5,meterDir:1,meterSpeed:0.011,
-    sweetCenter:0.5,sweetHalf:0.22,   // FIXED center, generous zone
-    combo:0,best:0,
-    done:false,
-    soilTaps:0,
-  };
-  bindInput();
-  loop();
+  mg={ progress:0, levelScore:0, meterPos:0.5, meterDir:1, meterSpeed:0.011, sweetCenter:0.5, sweetHalf:0.22, combo:0, best:0, done:false };
+  scene={ update:breakoutUpdate, draw:drawBreakout,
+    onDown:()=>meterHit(),
+    onKey:(e)=>{ if(e.code==='Space'){ e.preventDefault(); meterHit(); } } };
+  bindInput(); startLoop();
+}
+function breakoutUpdate(){
+  if(mg&&!mg.done){
+    mg.meterPos+=mg.meterDir*mg.meterSpeed;
+    if(mg.meterPos>1){mg.meterPos=1;mg.meterDir=-1;}
+    if(mg.meterPos<0){mg.meterPos=0;mg.meterDir=1;}
+  }
+  document.getElementById('goalFill').style.width=mg.progress+'%';
 }
 function meterHit(){
   if(!mg||mg.done)return;
@@ -315,19 +351,8 @@ function meterHit(){
     mg.done=true;flashGreen();shake=12;
     burst(cx,tipY,'#5bd55b',40);
     popup(cx,tipY-30,'破土！','#5bd55b');
-    setTimeout(()=>{stopInput();cancelAnimationFrame(raf);levelClear(mg.levelScore+200);},900);
+    setTimeout(()=>{stopScene();levelClear(mg.levelScore+200);},900);
   }
-}
-function loop(){
-  // update meter
-  if(mg&&!mg.done){
-    mg.meterPos+=mg.meterDir*mg.meterSpeed;
-    if(mg.meterPos>1){mg.meterPos=1;mg.meterDir=-1;}
-    if(mg.meterPos<0){mg.meterPos=0;mg.meterDir=1;}
-  }
-  stepEffects();
-  drawBreakout();
-  raf=requestAnimationFrame(loop);
 }
 function drawBreakout(){
   ctx.save();
@@ -410,16 +435,159 @@ function drawMeter(){
 }
 function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 
-// goal bar update inside loop via DOM
-function updateGoalBar(){if(mg)document.getElementById('goalFill').style.width=mg.progress+'%';}
-const _loop=loop;loop=function(){updateGoalBar();_loop();};
-
 // ═══════════════════════════════════════════════════════
-//  INPUT
+//  LEVEL 2 — 够阳光 (catch falling sunlight, 1 rival)
 // ═══════════════════════════════════════════════════════
-function onTap(e){if(e.type==='keydown'){if(e.code!=='Space')return;e.preventDefault();}meterHit();}
-function bindInput(){document.getElementById('stage').addEventListener('pointerdown',onTap);window.addEventListener('keydown',onTap);}
-function stopInput(){document.getElementById('stage').removeEventListener('pointerdown',onTap);window.removeEventListener('keydown',onTap);}
+let cg=null;
+const CATCH_GOAL=20;
+function catchY(){ return H-66; }
+function orbVal(o){ return o.type==='gold'?5:o.type==='big'?3:1; }
+function startCatch(){
+  document.getElementById('goalWrap').style.display='block';
+  document.getElementById('goalLabel').textContent='光照能量（目标 '+CATCH_GOAL+'）';
+  document.getElementById('stageHint').innerHTML='移动鼠标 / <b>A·D</b>·←→ 左右移动，接住<b>阳光</b>';
+  cg={
+    you:{x:W*0.55, energy:0, combo:0, best:0, shield:0, speedB:0},
+    rival:{x:W*0.3, energy:0, tx:W*0.3, retarget:0, speed:0.16},
+    orbs:[], spawnT:400, spawnGap:780, done:false, levelScore:0,
+    keyL:false, keyR:false, t:0, rivalLed:false, msg:'', msgT:0,
+  };
+  scene={ update:catchUpdate, draw:drawCatch,
+    onMove:(e)=>{ const r=document.getElementById('stage').getBoundingClientRect(); cg.you.x=Math.max(24,Math.min(W-24,e.clientX-r.left)); },
+    onKey:(e)=>{ if(e.code==='ArrowLeft'||e.code==='KeyA')cg.keyL=true; if(e.code==='ArrowRight'||e.code==='KeyD')cg.keyR=true; },
+    onKeyUp:(e)=>{ if(e.code==='ArrowLeft'||e.code==='KeyA')cg.keyL=false; if(e.code==='ArrowRight'||e.code==='KeyD')cg.keyR=false; } };
+  bindInput(); startLoop();
+}
+function spawnOrb(){
+  const r=Math.random();
+  const type = r<0.70?'small' : r<0.92?'big' : 'gold';
+  const vy = type==='small'?2.4 : type==='big'?1.7 : 1.5;
+  cg.orbs.push({ x:40+Math.random()*(W-80), y:-20, vy, type });
+}
+function catchUpdate(dt){
+  if(cg.done) return;
+  const f=dt/16; cg.t+=dt;
+  // keyboard move
+  const ks=(0.42+cg.you.speedB)*dt;
+  if(cg.keyL) cg.you.x=Math.max(24,cg.you.x-ks);
+  if(cg.keyR) cg.you.x=Math.min(W-24,cg.you.x+ks);
+  // spawn (ramps up)
+  cg.spawnT-=dt;
+  if(cg.spawnT<=0){ spawnOrb(); cg.spawnT=cg.spawnGap*(0.7+Math.random()*0.6); cg.spawnGap=Math.max(560,cg.spawnGap-7); }
+  // rival picks a target (param-driven, not perfect)
+  cg.rival.retarget-=dt;
+  if(cg.rival.retarget<=0){
+    cg.rival.retarget=240+Math.random()*220;
+    const cand=cg.orbs.filter(o=>o.y<catchY()-20);
+    if(cand.length){
+      const r=Math.random(); let pick;
+      if(r<0.60) pick=cand.reduce((a,b)=>Math.abs(b.x-cg.rival.x)<Math.abs(a.x-cg.rival.x)?b:a);
+      else if(r<0.85) pick=cand.reduce((a,b)=>orbVal(b)>orbVal(a)?b:a);
+      else pick=cand[Math.floor(Math.random()*cand.length)];
+      cg.rival.tx=pick.x;
+    }
+  }
+  // rubber-band speed: ease when leading, hustle when behind
+  let rs=cg.rival.speed;
+  if(cg.rival.energy-cg.you.energy>4) rs*=0.6;
+  if(cg.you.energy-cg.rival.energy>6) rs*=1.4;
+  cg.rival.x+=Math.sign(cg.rival.tx-cg.rival.x)*Math.min(Math.abs(cg.rival.tx-cg.rival.x),rs*dt);
+  cg.rival.x=Math.max(24,Math.min(W-24,cg.rival.x));
+  // orbs fall + catch resolution
+  const cy=catchY();
+  for(let i=cg.orbs.length-1;i>=0;i--){
+    const o=cg.orbs[i]; o.y+=o.vy*f;
+    if(o.y>=cy){
+      const dy=Math.abs(o.x-cg.you.x), dr=Math.abs(o.x-cg.rival.x);
+      if(dy<30 && dy<=dr){ catchByYou(o); cg.orbs.splice(i,1); continue; }
+      if(dr<28){ cg.rival.energy+=orbVal(o); cg.orbs.splice(i,1); continue; }
+      if(o.y>cy+18){ missOrb(o); cg.orbs.splice(i,1); }
+    }
+  }
+  // win
+  if(cg.you.energy>=CATCH_GOAL && !cg.done){
+    cg.done=true; flashGreen(); shake=10;
+    burst(cg.you.x,cy,'#5bd55b',40); popup(cg.you.x,cy-30,'光照满了！','#5bd55b');
+    setTimeout(()=>{ stopScene(); levelClear(cg.levelScore+200); },900);
+  }
+  // rival-leads taunt (no fail — keep racing)
+  if(cg.rival.energy>=CATCH_GOAL && !cg.rivalLed){ cg.rivalLed=true; cg.msg='对手先到顶了！追上它！'; cg.msgT=2200; }
+  if(cg.msgT>0) cg.msgT-=dt;
+  document.getElementById('goalFill').style.width=Math.min(100,cg.you.energy/CATCH_GOAL*100)+'%';
+}
+function catchByYou(o){
+  const v=orbVal(o); cg.you.energy+=v; cg.you.combo++; cg.you.best=Math.max(cg.you.best,cg.you.combo);
+  if(cg.you.combo===3) cg.you.speedB=0.12;
+  if(cg.you.combo===5) cg.you.shield=1;
+  const col=o.type==='gold'?'#ffd54a':o.type==='big'?'#ffe08a':'#fff2b0';
+  cg.levelScore+=v*20+(cg.you.combo>1?cg.you.combo*5:0);
+  burst(o.x,catchY(),col,o.type==='gold'?22:10); shake=o.type==='gold'?6:2;
+  popup(o.x,catchY()-18,'+'+v+(cg.you.combo>1?' x'+cg.you.combo:''),col);
+  document.getElementById('hudScore').textContent=G.score+cg.levelScore;
+}
+function missOrb(o){
+  if(Math.abs(o.x-cg.you.x)<90){
+    if(cg.you.shield){ cg.you.shield=0; popup(o.x,catchY()-18,'护盾抵消','#5b9bd5'); }
+    else { cg.you.combo=0; cg.you.speedB=0; }
+  }
+}
+function drawCatch(){
+  ctx.save();
+  if(shake>0)ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);
+  ctx.clearRect(-20,-20,W+40,H+40);
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#0c2436'); g.addColorStop(0.5,'#0a1e14'); g.addColorStop(1,'#071407');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  ctx.globalAlpha=.6+.2*Math.sin(cg.t/600); ctx.fillStyle='#d4a853';
+  ctx.beginPath(); ctx.arc(W-58,52,26,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;
+  const cy=catchY();
+  ctx.fillStyle='#0a1a0a'; ctx.fillRect(0,cy+14,W,H-cy-14);
+  ctx.strokeStyle='#2a4a2a'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,cy+14); ctx.lineTo(W,cy+14); ctx.stroke();
+  // landing previews
+  cg.orbs.forEach(o=>{
+    const gold=o.type==='gold';
+    ctx.globalAlpha=0.16; ctx.strokeStyle=gold?'#ffd54a':'#9ad0ff'; ctx.setLineDash([3,6]);
+    ctx.beginPath(); ctx.moveTo(o.x,o.y); ctx.lineTo(o.x,cy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.globalAlpha=0.22; ctx.fillStyle=gold?'#ffd54a':'#9ad0ff';
+    ctx.beginPath(); ctx.ellipse(o.x,cy+6,12,4,0,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;
+  });
+  // orbs
+  cg.orbs.forEach(o=>{
+    const rad=o.type==='gold'?11:o.type==='big'?10:7, gold=o.type==='gold';
+    if(gold){ ctx.save(); ctx.shadowColor='#ffd54a'; ctx.shadowBlur=16+8*Math.sin(cg.t/100); }
+    ctx.fillStyle=gold?'#ffd54a':o.type==='big'?'#ffe08a':'#fff2b0';
+    ctx.beginPath(); ctx.arc(o.x,o.y,rad,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle=ctx.fillStyle; ctx.globalAlpha=.5; ctx.lineWidth=1.5;
+    for(let a=0;a<6;a++){ const an=a/6*Math.PI*2+cg.t/400; ctx.beginPath(); ctx.moveTo(o.x+Math.cos(an)*(rad+2),o.y+Math.sin(an)*(rad+2)); ctx.lineTo(o.x+Math.cos(an)*(rad+6),o.y+Math.sin(an)*(rad+6)); ctx.stroke(); }
+    ctx.globalAlpha=1; if(gold) ctx.restore();
+  });
+  drawBasket(cg.rival.x,cy,'#d98a8a','甲',false);
+  drawBasket(cg.you.x,cy,'#4caf78','你',cg.you.shield>0);
+  drawEffects();
+  drawRaceBar();
+  if(cg.you.combo>1){ ctx.fillStyle='#5bd55b'; ctx.font='bold 16px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('连击 x'+cg.you.combo,cg.you.x,cy-44); ctx.textAlign='left'; }
+  if(cg.msgT>0){ ctx.globalAlpha=Math.min(1,cg.msgT/400); ctx.fillStyle='#e0a052'; ctx.font='bold 18px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(cg.msg,W/2,92); ctx.textAlign='left'; ctx.globalAlpha=1; }
+  ctx.restore();
+}
+function drawBasket(x,cy,color,label,shield){
+  ctx.strokeStyle=color; ctx.lineWidth=3; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(x,cy+14); ctx.lineTo(x,cy-2); ctx.stroke();
+  ctx.fillStyle=color; ctx.globalAlpha=.22; ctx.beginPath(); ctx.ellipse(x,cy-2,18,8,0,0,Math.PI,true); ctx.fill(); ctx.globalAlpha=1;
+  ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(x,cy-2,18,Math.PI,Math.PI*2,true); ctx.stroke();
+  ctx.fillStyle=color; ctx.beginPath(); ctx.ellipse(x-9,cy-7,9,4,-0.6,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x+9,cy-7,9,4,0.6,0,Math.PI*2); ctx.fill();
+  ctx.font='10px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(label,x,cy+27); ctx.textAlign='left';
+  if(shield){ ctx.strokeStyle='#5b9bd5'; ctx.globalAlpha=.7; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x,cy-2,24,0,Math.PI*2); ctx.stroke(); ctx.globalAlpha=1; }
+}
+function drawRaceBar(){
+  const bw=130,bx=20,by=20,bh=9;
+  ctx.fillStyle='rgba(255,255,255,.06)'; roundRect(bx,by,bw,bh,5); ctx.fill();
+  ctx.fillStyle='#4caf78'; roundRect(bx,by,bw*Math.min(1,cg.you.energy/CATCH_GOAL),bh,5); ctx.fill();
+  ctx.fillStyle='#4caf78'; ctx.font='10px "Space Mono",monospace'; ctx.fillText('你 '+cg.you.energy,bx+bw+8,by+8);
+  ctx.fillStyle='rgba(255,255,255,.06)'; roundRect(bx,by+15,bw,bh,5); ctx.fill();
+  ctx.fillStyle='#d98a8a'; roundRect(bx,by+15,bw*Math.min(1,cg.rival.energy/CATCH_GOAL),bh,5); ctx.fill();
+  ctx.fillStyle='#d98a8a'; ctx.font='10px "Space Mono",monospace'; ctx.fillText('甲 '+cg.rival.energy,bx+bw+8,by+23);
+}
 
 // ═══════════════════════════════════════════════════════
 //  INIT
