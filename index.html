@@ -82,10 +82,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);overflow:hid
 <div class="screen show" id="scIntro">
   <div class="card">
     <div class="title">THE TREE ARENA</div>
-    <div class="sub">无尽攀登 · 看你能爬到第几轮</div>
+    <div class="sub" id="introSub">无尽攀登 · 看你能爬到第几轮</div>
     <div class="lineup" id="lineup"></div>
     <div class="ic-stat" id="introBest" style="margin-bottom:20px"></div>
-    <button class="btn" onclick="startRun()">开始攀登 →</button>
+    <button class="btn" id="introStart" onclick="startRun()">开始攀登 →</button>
   </div>
 </div>
 
@@ -104,12 +104,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);overflow:hid
 <!-- Round banner (endless) -->
 <div class="screen" id="scRound">
   <div class="card" style="text-align:center;cursor:pointer">
-    <div class="ic-lv">无尽攀登 · ENDLESS</div>
+    <div class="ic-lv" id="rbLabel">无尽攀登 · ENDLESS</div>
     <div class="ic-icon" id="rbIcon" style="margin:6px 0">🌳</div>
     <div class="ic-name" id="rbNum" style="font-size:34px;color:var(--gold)">第 1 轮</div>
     <div class="ic-name" id="rbMod" style="font-size:16px;margin-top:2px">风和日丽</div>
     <div class="ic-how" id="rbDesc" style="margin-top:8px"></div>
-    <div style="font-size:9px;color:var(--muted);letter-spacing:2px;opacity:.5;margin-top:14px">点击任意处开始</div>
+    <div id="rbStart" style="font-size:9px;color:var(--muted);letter-spacing:2px;opacity:.5;margin-top:14px">点击任意处开始</div>
   </div>
 </div>
 
@@ -117,20 +117,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);overflow:hid
 <div class="screen" id="scRunOver">
   <div class="card">
     <div class="ic-icon">🍂</div>
-    <div class="ic-lv">本轮终结 · YOUR RUN</div>
+    <div class="ic-lv" id="roLabel">本轮终结 · YOUR RUN</div>
     <div class="ic-name" id="roTitle" style="color:var(--gold)">新芽旅人</div>
     <div class="ic-name" id="roEn" style="font-size:11px;color:var(--muted);letter-spacing:2px;margin-top:-4px">SPROUT</div>
     <div class="ic-how" id="roMsg" style="margin:8px 0 4px"></div>
     <div class="ic-stat">
-      <div><div class="s-v" id="roRound">1</div><div class="s-l">爬到第几轮</div></div>
-      <div><div class="s-v" id="roScore">0</div><div class="s-l">本局得分</div></div>
+      <div><div class="s-v" id="roRound">1</div><div class="s-l" id="roRoundL">爬到第几轮</div></div>
+      <div><div class="s-v" id="roScore">0</div><div class="s-l" id="roScoreL">本局得分</div></div>
     </div>
     <div class="ic-stat" style="margin-top:-6px">
-      <div><div class="s-v" id="roBestR" style="font-size:15px;color:var(--gold)">0</div><div class="s-l">最高轮</div></div>
-      <div><div class="s-v" id="roBestS" style="font-size:15px;color:var(--gold)">0</div><div class="s-l">最高分</div></div>
+      <div><div class="s-v" id="roBestR" style="font-size:15px;color:var(--gold)">0</div><div class="s-l" id="roBestRL">最高轮</div></div>
+      <div><div class="s-v" id="roBestS" style="font-size:15px;color:var(--gold)">0</div><div class="s-l" id="roBestSL">最高分</div></div>
     </div>
     <div class="ic-how" id="roNext" style="color:var(--green);margin-bottom:20px"></div>
-    <button class="btn" onclick="startRun()">再爬一次 →</button>
+    <button class="btn" id="roAgain" onclick="startRun()">再爬一次 →</button>
   </div>
 </div>
 
@@ -153,9 +153,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);overflow:hid
   </div>
   <div class="hud-path" id="hudPath"></div>
   <div class="hud-r">
-    <div class="hud-score"><span class="lbl">分数</span><span id="hudScore">0</span></div>
+    <div class="hud-score"><span class="lbl" id="scoreLbl">分数</span><span id="hudScore">0</span></div>
   </div>
 </div>
+
+<!-- Language toggle (always on top, clickable over menus) -->
+<button id="langBtn" onclick="toggleLang()" style="position:fixed;top:11px;right:16px;z-index:900;cursor:pointer;font-family:var(--font);font-size:11px;font-weight:700;letter-spacing:1px;padding:3px 10px;border-radius:3px;border:1px solid var(--gold);color:var(--gold);background:rgba(3,10,3,.7)">EN</button>
 
 <!-- Stage -->
 <div class="stage" id="stage">
@@ -169,6 +172,57 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);overflow:hid
 </div>
 
 <script>
+// ═══════════════════════════════════════════════════════
+//  i18n — keys are the Chinese source strings; tr() returns EN in english mode
+// ═══════════════════════════════════════════════════════
+let lang = localStorage.getItem('ta_lang')||'zh';
+const EN={
+  '破土':'Sprout','够阳光':'Sunlight','荡藤':'Swing','护果':'Defend','夺冠':'Crown',
+  '顶破土壤，钻出地面':'Break through the soil','接住飘落的阳光，集满光照':'Catch falling sunlight',
+  '荡藤攀爬到目标高度':'Swing up to the target height','打退害虫和对手，守住果实':'Fend off pests & rivals, protect the fruit',
+  '击败最强对手，登顶树冠':'Beat the boss, claim the crown','对手 ×':'Rivals ×','独自':'Solo',
+  '风和日丽':'Calm','大风':'Windy','虫潮':'Bug Swarm','金阳丰收':'Golden Harvest','贫土':'Barren Soil','狂暴树冠':'Raging Crown',
+  '平稳的一轮':'A calm round','够阳光的阳光会被吹偏':'Sunlight drifts in the wind','护果关害虫大量增加':'Far more pests in Defend',
+  '够阳光关金阳光更多':'More gold sunlight in Sunlight','破土绿区更小、藤摆更快':'Smaller green zone, faster vines','夺冠关 Boss 更快更凶':'Boss is faster & fiercer',
+  '破土进度':'Breakthrough','守住果实 · 撑过 45 秒':'Protect the fruit · 45s','树冠 Boss · 击败它':'Crown Boss · Defeat it',
+  '光照能量（目标 ':'Light energy (goal ','攀爬高度（目标 ':'Climb height (goal ','）':')',
+  '白线扫到<b>绿区</b>时，点击屏幕 / 空格':'When the line hits the <b>green zone</b>, click / Space',
+  '移动鼠标 / <b>A·D</b>·←→ 左右移动，接住<b>阳光</b>':'Move (mouse / <b>A·D</b>·←→) to catch <b>sunlight</b>',
+  '荡到<b>弧线顶端</b>（出现"▲ 甩!"）时点击 / 空格 甩藤上爬':'Tap / Space at the <b>top of the arc</b> (▲ SWING!) to climb',
+  '移动瞄准、<b>按住可连发</b> —— 优先打<b>害虫</b>和<b>抢果对手</b>，别让它们碰到果实':'Aim with the mouse, <b>hold to fire</b> — shoot <b>pests</b> & <b>rivals</b> before they reach the fruit',
+  '<b style="color:#e05252">红光→点格挡</b>　<b style="color:#ffd54a">金光→点反击</b>　看准光圈缩到中心时点击/空格':'<b style="color:#e05252">Red → Block</b>　<b style="color:#ffd54a">Gold → Counter</b>　Tap/Space when the ring meets the center',
+  '你':'YOU','甲':'A','乙':'B','敌':'E','金':'G','你 ':'You ','甲 ':'A ',
+  '▲ 甩!':'▲ SWING!','▼ 点击！':'▼ TAP!','● 点!':'● TAP!',
+  '连击 x':'COMBO x','超车 ':'Overtake ','守住了！':'Survived!','破土！':'Break!','登顶树冠！':'Summit!','光照满了！':'Full Light!','夺冠！':'Crowned!',
+  '格挡':'BLOCK','反击':'COUNTER','格挡!':'Block!','反击! -12':'Counter! -12','受伤 -1':'Hurt -1','反击落空':'Miss','太早/太晚':'Too early/late',
+  '没踩中绿区':'Missed green','荡到顶端再点!':'Tap at the top!','差一点':'Close!','护盾抵消':'Shield!','金虫！全清':'Gold! Clear','看招！':'Ready!',
+  '最终对决 · 点击绿区':'Final Clash · Tap green','最终对决！点击绿区终结它':'Final Clash! Tap the green to finish',
+  '击杀 ':'Kills ','果实 ':'Fruit ','终结':'FINAL','阶段 ':'Phase ','起点':'Start','树冠':'Crown','树冠王':'Crown King',
+  '对手先到顶了！追上它！':'A rival reached the top! Catch up!',
+  '分数':'Score','第 ':'Round ',' 轮':'','难度 ×':'Difficulty ×','本轮天象 · ':'Weather · ',
+  '　·　越爬越快':'　·　faster each round','　·　从这里开始攀登':'　·　start climbing here',
+  '下个目标：超过第 ':'Next goal: pass round ','🏆 新纪录！爬到了第 ':'🏆 New best! Reached round ',
+  '两个对手都先登顶了 —— 你被甩在了最后。':'Both rivals reached the crown first — you came last.',
+  '果实被啃光了 —— 没守住。':'The fruit was devoured — you didn\'t hold it.',
+  '你倒在了树冠之下 —— 再来一次。':'You fell beneath the crown — try again.',
+  '无尽攀登 · 看你能爬到第几轮':'Endless Climb · How high can you go?','开始攀登 →':'Start Climbing →',
+  '5 个小游戏循环成一轮，越爬越快、每轮天象不同。失败即结束。':'5 minigames = one round. Faster each round, new weather every time. One fail ends the run.',
+  '无尽攀登 · ENDLESS':'ENDLESS CLIMB','点击任意处开始':'Tap anywhere to start',
+  '本轮终结 · YOUR RUN':'YOUR RUN','爬到第几轮':'Round reached','本局得分':'Run score','最高轮':'Best round','最高分':'Best score','再爬一次 →':'Climb again →',
+};
+function tr(s){ return (lang==='en' && EN[s]!==undefined) ? EN[s] : s; }
+function setGoal(zh){ G.goalKey=zh; document.getElementById('goalLabel').textContent=tr(zh); }
+function setHint(zh){ G.hintKey=zh; document.getElementById('stageHint').innerHTML=tr(zh); }
+function toggleLang(){ lang=(lang==='en'?'zh':'en'); try{localStorage.setItem('ta_lang',lang);}catch(e){} applyLang(); }
+function applyLang(){
+  document.getElementById('langBtn').textContent=(lang==='en'?'中':'EN');
+  const set=(id,zh)=>{const e=document.getElementById(id);if(e)e.textContent=tr(zh);};
+  set('introSub',tr('无尽攀登 · 看你能爬到第几轮')); set('introStart',tr('开始攀登 →')); set('scoreLbl',tr('分数'));
+  set('rbLabel',tr('无尽攀登 · ENDLESS')); set('rbStart',tr('点击任意处开始'));
+  set('roLabel',tr('本轮终结 · YOUR RUN')); set('roRoundL',tr('爬到第几轮')); set('roScoreL',tr('本局得分')); set('roBestRL',tr('最高轮')); set('roBestSL',tr('最高分')); set('roAgain',tr('再爬一次 →'));
+  if(typeof G!=='undefined'&&G){ renderLineup(); renderHUD(); if(G.goalKey)setGoal(G.goalKey); if(G.hintKey)setHint(G.hintKey); }
+}
+
 // ═══════════════════════════════════════════════════════
 //  LEVEL LINEUP
 // ═══════════════════════════════════════════════════════
@@ -246,17 +300,17 @@ function renderLineup(){
   document.getElementById('lineup').innerHTML=LEVELS.map(L=>
     `<div class="lvrow">
       <div class="lv-ic">${L.icon}</div>
-      <div class="lv-meta"><div class="lv-name"><span class="lvnum">Lv${L.lv}</span>${L.name}</div><div class="lv-desc">${L.goal}</div></div>
-      <div class="lv-rivals">${L.rivals?('对手 ×'+L.rivals):'独自'}</div>
+      <div class="lv-meta"><div class="lv-name"><span class="lvnum">Lv${L.lv}</span>${tr(L.name)}</div><div class="lv-desc">${tr(L.goal)}</div></div>
+      <div class="lv-rivals">${L.rivals?(tr('对手 ×')+L.rivals):tr('独自')}</div>
     </div>`).join('');
   document.getElementById('introBest').innerHTML = (G.bestRound>0)
-    ? `<div><div class="s-v" style="color:var(--gold)">${G.bestRound}</div><div class="s-l">最高轮</div></div><div><div class="s-v" style="color:var(--gold)">${G.bestScore}</div><div class="s-l">最高分</div></div>`
-    : '<div style="font-size:11px;color:var(--muted)">5 个小游戏循环成一轮，越爬越快、每轮天象不同。失败即结束。</div>';
+    ? `<div><div class="s-v" style="color:var(--gold)">${G.bestRound}</div><div class="s-l">${tr('最高轮')}</div></div><div><div class="s-v" style="color:var(--gold)">${G.bestScore}</div><div class="s-l">${tr('最高分')}</div></div>`
+    : `<div style="font-size:11px;color:var(--muted)">${tr('5 个小游戏循环成一轮，越爬越快、每轮天象不同。失败即结束。')}</div>`;
 }
 function renderHUD(){
   const L=LEVELS[G.level-1];
-  const m=G.modifier&&G.modifier.id!=='none'?(' · '+G.modifier.icon+G.modifier.name):'';
-  document.getElementById('lvlBadge').textContent=`第${G.round}轮 Lv${L.lv} ${L.name}${m}`;
+  const m=G.modifier&&G.modifier.id!=='none'?(' · '+G.modifier.icon+tr(G.modifier.name)):'';
+  document.getElementById('lvlBadge').textContent=`${tr('第 ')}${G.round}${tr(' 轮')} Lv${L.lv} ${tr(L.name)}${m}`;
   document.getElementById('hudScore').textContent=G.score;
   document.getElementById('hudPath').innerHTML=LEVELS.map(x=>`<div class="pnode ${x.lv<G.level?'done':x.lv===G.level?'now':''}"></div>`).join('');
 }
@@ -295,25 +349,25 @@ function endRun(msg){
   if(newBestR){ G.bestRound=G.round; try{localStorage.setItem('ta_bestRound',G.round);}catch(e){} }
   if(newBestS){ G.bestScore=G.score; try{localStorage.setItem('ta_bestScore',G.score);}catch(e){} }
   const t=pickTitle();
-  document.getElementById('roTitle').textContent=t.name;
-  document.getElementById('roEn').textContent=t.en;
+  document.getElementById('roTitle').textContent=(lang==='en'?t.en:t.name);
+  document.getElementById('roEn').textContent=(lang==='en'?t.name:t.en);
   document.getElementById('roRound').textContent=G.round;
   document.getElementById('roScore').textContent=G.score;
   document.getElementById('roBestR').textContent=G.bestRound;
   document.getElementById('roBestS').textContent=G.bestScore;
   document.getElementById('roMsg').textContent=msg||'';
   document.getElementById('roNext').innerHTML = (newBestR&&G.round>1)
-    ? '🏆 新纪录！爬到了第 '+G.round+' 轮'
-    : '下个目标：超过第 '+G.bestRound+' 轮';
+    ? tr('🏆 新纪录！爬到了第 ')+G.round+tr(' 轮')
+    : tr('下个目标：超过第 ')+G.bestRound+tr(' 轮');
   show('scRunOver');
 }
 // round banner (auto-advance ~2.4s or click)
 function showRoundBanner(onDone){
   const m=G.modifier;
   document.getElementById('rbIcon').textContent = (m&&m.icon)?m.icon:'🌳';
-  document.getElementById('rbNum').textContent='第 '+G.round+' 轮';
-  document.getElementById('rbMod').textContent=(m&&m.id!=='none')?('本轮天象 · '+m.name):'风和日丽';
-  document.getElementById('rbDesc').innerHTML=((m&&m.id!=='none')?m.desc+'<br>':'')+'难度 ×'+G.diff.toFixed(2)+(G.round>1?'　·　越爬越快':'　·　从这里开始攀登');
+  document.getElementById('rbNum').textContent=tr('第 ')+G.round+tr(' 轮');
+  document.getElementById('rbMod').textContent=(m&&m.id!=='none')?(tr('本轮天象 · ')+tr(m.name)):tr('风和日丽');
+  document.getElementById('rbDesc').innerHTML=((m&&m.id!=='none')?tr(m.desc)+'<br>':'')+tr('难度 ×')+G.diff.toFixed(2)+(G.round>1?tr('　·　越爬越快'):tr('　·　从这里开始攀登'));
   const el=document.getElementById('scRound'); el.classList.add('show');
   const go=()=>{ clearTimeout(el._rt); el.onclick=null; el.classList.remove('show'); if(onDone)onDone(); };
   el.onclick=go; clearTimeout(el._rt); el._rt=setTimeout(go,2400);
@@ -389,8 +443,8 @@ function unbindInput(){
 let mg=null;
 function startBreakout(){
   document.getElementById('goalWrap').style.display='block';
-  document.getElementById('goalLabel').textContent='破土进度';
-  document.getElementById('stageHint').innerHTML='白线扫到<b>绿区</b>时，点击屏幕 / 空格';
+  document.getElementById('goalLabel').textContent=tr('破土进度');
+  document.getElementById('stageHint').innerHTML=tr('白线扫到<b>绿区</b>时，点击屏幕 / 空格');
   const baseHalf=modId()==='barren'?0.16:0.22;
   mg={ progress:0, levelScore:0, meterPos:0.5, meterDir:1, meterSpeed:0.011*G.diff, sweetCenter:0.5, sweetHalf:baseHalf, baseHalf, combo:0, best:0, done:false };
   scene={ update:breakoutUpdate, draw:drawBreakout,
@@ -412,7 +466,7 @@ function meterHit(){
   let gain,label,color;
   if(dist<mg.sweetHalf*0.4){gain=22;label='PERFECT';color='#5bd55b';mg.combo++;}
   else if(dist<mg.sweetHalf){gain=14;label='GOOD';color='#4caf78';mg.combo++;}
-  else{gain=0;label='差一点';color='#e0a052';mg.combo=0;}
+  else{gain=0;label=tr('差一点');color='#e0a052';mg.combo=0;}
   mg.best=Math.max(mg.best,mg.combo);
   const comboBonus=mg.combo>1?Math.min(mg.combo*2,16):0;
   if(gain>0)gain+=comboBonus*0.4;
@@ -434,7 +488,7 @@ function meterHit(){
   if(mg.progress>=100&&!mg.done){
     mg.done=true;flashGreen();shake=12;
     burst(cx,tipY,'#5bd55b',40);
-    popup(cx,tipY-30,'破土！','#5bd55b');
+    popup(cx,tipY-30,tr('破土！'),'#5bd55b');
     sceneTimeout(()=>{stopScene();levelClear(mg.levelScore+200);},900);
   }
 }
@@ -510,11 +564,11 @@ function drawMeter(){
     const pulse=0.55+0.45*Math.abs(Math.sin(Date.now()/110));
     ctx.globalAlpha=pulse;
     ctx.fillStyle='#5bd55b';ctx.font='bold 26px "Space Mono",monospace';
-    ctx.fillText('▼ 点击！',W/2,my-22);
+    ctx.fillText(tr('▼ 点击！'),W/2,my-22);
     ctx.globalAlpha=1;
   }
   // combo
-  if(mg.combo>1){ctx.fillStyle='#5bd55b';ctx.font='bold 14px "Space Mono",monospace';ctx.fillText('连击 x'+mg.combo,W/2,my-52);}
+  if(mg.combo>1){ctx.fillStyle='#5bd55b';ctx.font='bold 14px "Space Mono",monospace';ctx.fillText(tr('连击 x')+mg.combo,W/2,my-52);}
   ctx.textAlign='left';
 }
 function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
@@ -528,8 +582,8 @@ function catchY(){ return H-66; }
 function orbVal(o){ return o.type==='gold'?5:o.type==='big'?3:1; }
 function startCatch(){
   document.getElementById('goalWrap').style.display='block';
-  document.getElementById('goalLabel').textContent='光照能量（目标 '+CATCH_GOAL+'）';
-  document.getElementById('stageHint').innerHTML='移动鼠标 / <b>A·D</b>·←→ 左右移动，接住<b>阳光</b>';
+  document.getElementById('goalLabel').textContent=tr('光照能量（目标 ')+CATCH_GOAL+tr('）');
+  document.getElementById('stageHint').innerHTML=tr('移动鼠标 / <b>A·D</b>·←→ 左右移动，接住<b>阳光</b>');
   cg={
     you:{x:W*0.55, energy:0, combo:0, best:0, shield:0, speedB:0},
     rival:{x:W*0.3, energy:0, tx:W*0.3, retarget:0, speed:0.16*G.diff},
@@ -594,11 +648,11 @@ function catchUpdate(dt){
   // win
   if(cg.you.energy>=CATCH_GOAL && !cg.done){
     cg.done=true; flashGreen(); shake=10;
-    burst(cg.you.x,cy,'#5bd55b',40); popup(cg.you.x,cy-30,'光照满了！','#5bd55b');
+    burst(cg.you.x,cy,'#5bd55b',40); popup(cg.you.x,cy-30,tr('光照满了！'),'#5bd55b');
     sceneTimeout(()=>{ stopScene(); levelClear(cg.levelScore+200); },900);
   }
   // rival-leads taunt (no fail — keep racing)
-  if(cg.rival.energy>=CATCH_GOAL && !cg.rivalLed){ cg.rivalLed=true; cg.msg='对手先到顶了！追上它！'; cg.msgT=2200; }
+  if(cg.rival.energy>=CATCH_GOAL && !cg.rivalLed){ cg.rivalLed=true; cg.msg=tr('对手先到顶了！追上它！'); cg.msgT=2200; }
   if(cg.msgT>0) cg.msgT-=dt;
   document.getElementById('goalFill').style.width=Math.min(100,cg.you.energy/CATCH_GOAL*100)+'%';
 }
@@ -615,7 +669,7 @@ function catchByYou(o){
 }
 function missOrb(o){
   if(Math.abs(o.x-cg.you.x)<90){
-    if(cg.you.shield){ cg.you.shield=0; popup(o.x,catchY()-18,'护盾抵消','#5b9bd5'); }
+    if(cg.you.shield){ cg.you.shield=0; popup(o.x,catchY()-18,tr('护盾抵消'),'#5b9bd5'); }
     else { cg.you.combo=0; cg.you.speedB=0; }
   }
 }
@@ -649,11 +703,11 @@ function drawCatch(){
     for(let a=0;a<6;a++){ const an=a/6*Math.PI*2+cg.t/400; ctx.beginPath(); ctx.moveTo(o.x+Math.cos(an)*(rad+2),o.y+Math.sin(an)*(rad+2)); ctx.lineTo(o.x+Math.cos(an)*(rad+6),o.y+Math.sin(an)*(rad+6)); ctx.stroke(); }
     ctx.globalAlpha=1; if(gold) ctx.restore();
   });
-  drawBasket(cg.rival.x,cy,'#d98a8a','甲',false);
-  drawBasket(cg.you.x,cy,'#4caf78','你',cg.you.shield>0);
+  drawBasket(cg.rival.x,cy,'#d98a8a',tr('甲'),false);
+  drawBasket(cg.you.x,cy,'#4caf78',tr('你'),cg.you.shield>0);
   drawEffects();
   drawRaceBar();
-  if(cg.you.combo>1){ ctx.fillStyle='#5bd55b'; ctx.font='bold 16px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('连击 x'+cg.you.combo,cg.you.x,cy-44); ctx.textAlign='left'; }
+  if(cg.you.combo>1){ ctx.fillStyle='#5bd55b'; ctx.font='bold 16px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(tr('连击 x')+cg.you.combo,cg.you.x,cy-44); ctx.textAlign='left'; }
   if(cg.msgT>0){ ctx.globalAlpha=Math.min(1,cg.msgT/400); ctx.fillStyle='#e0a052'; ctx.font='bold 18px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(cg.msg,W/2,92); ctx.textAlign='left'; ctx.globalAlpha=1; }
   ctx.restore();
 }
@@ -671,10 +725,10 @@ function drawRaceBar(){
   const bw=130,bx=20,by=20,bh=9;
   ctx.fillStyle='rgba(255,255,255,.06)'; roundRect(bx,by,bw,bh,5); ctx.fill();
   ctx.fillStyle='#4caf78'; roundRect(bx,by,bw*Math.min(1,cg.you.energy/CATCH_GOAL),bh,5); ctx.fill();
-  ctx.fillStyle='#4caf78'; ctx.font='10px "Space Mono",monospace'; ctx.fillText('你 '+cg.you.energy,bx+bw+8,by+8);
+  ctx.fillStyle='#4caf78'; ctx.font='10px "Space Mono",monospace'; ctx.fillText(tr('你 ')+cg.you.energy,bx+bw+8,by+8);
   ctx.fillStyle='rgba(255,255,255,.06)'; roundRect(bx,by+15,bw,bh,5); ctx.fill();
   ctx.fillStyle='#d98a8a'; roundRect(bx,by+15,bw*Math.min(1,cg.rival.energy/CATCH_GOAL),bh,5); ctx.fill();
-  ctx.fillStyle='#d98a8a'; ctx.font='10px "Space Mono",monospace'; ctx.fillText('甲 '+cg.rival.energy,bx+bw+8,by+23);
+  ctx.fillStyle='#d98a8a'; ctx.font='10px "Space Mono",monospace'; ctx.fillText(tr('甲 ')+cg.rival.energy,bx+bw+8,by+23);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -684,11 +738,11 @@ let sg=null;
 const SWING_GOAL=20;
 function startSwing(){
   document.getElementById('goalWrap').style.display='block';
-  document.getElementById('goalLabel').textContent='攀爬高度（目标 '+SWING_GOAL+'）';
-  document.getElementById('stageHint').innerHTML='荡到<b>弧线顶端</b>（出现"▲ 甩!"）时点击 / 空格 甩藤上爬';
+  document.getElementById('goalLabel').textContent=tr('攀爬高度（目标 ')+SWING_GOAL+tr('）');
+  document.getElementById('stageHint').innerHTML=tr('荡到<b>弧线顶端</b>（出现"▲ 甩!"）时点击 / 空格 甩藤上爬');
   const sMul=G.diff*(modId()==='barren'?1.2:1);
   sg={ height:0, goal:SWING_GOAL, phase:0, speed:0.009*sMul, sMul, combo:0, best:0, levelScore:0, done:false,
-    rivals:[{name:'甲',color:'#d98a8a',h:0,t:900,interval:620/G.diff},{name:'乙',color:'#7fa8d4',h:0,t:1050,interval:720/G.diff}],
+    rivals:[{name:tr('甲'),color:'#d98a8a',h:0,t:900,interval:620/G.diff},{name:tr('乙'),color:'#7fa8d4',h:0,t:1050,interval:720/G.diff}],
     msg:'', msgT:0 };
   scene={ update:swingUpdate, draw:drawSwing,
     onDown:()=>swingGrab(),
@@ -718,7 +772,7 @@ function swingUpdate(dt){
   // top-2 advance: you only fail if BOTH rivals reach the crown before you
   if(!sg.done && sg.rivals.every(r=>r.h>=sg.goal)){
     sg.done=true;
-    sceneTimeout(()=>{ stopScene(); levelFail('两个对手都先登顶了 —— 你被甩在了最后。'); },700);
+    sceneTimeout(()=>{ stopScene(); levelFail(tr('两个对手都先登顶了 —— 你被甩在了最后。')); },700);
     return;
   }
   if(sg.msgT>0) sg.msgT-=dt;
@@ -730,7 +784,7 @@ function swingGrab(){
   let inc,label,color;
   if(v<0.22){ inc=2; label='Perfect!'; color='#5bd55b'; sg.combo++; }
   else if(v<0.55){ inc=1; label='Nice!'; color='#4caf78'; sg.combo++; }   // forgiving: most taps near an apex count
-  else{ inc=0; label='荡到顶端再点!'; color='#e0a052'; sg.combo=0; }        // only the fast middle is a miss
+  else{ inc=0; label=tr('荡到顶端再点!'); color='#e0a052'; sg.combo=0; }        // only the fast middle is a miss
   sg.best=Math.max(sg.best,sg.combo); if(G.perf)G.perf.vineCombo=Math.max(G.perf.vineCombo,sg.combo);
   const p=bobPos();
   if(inc>0){
@@ -740,12 +794,12 @@ function swingGrab(){
     // strong upward "climbed!" feedback: radial burst + upward streaks
     burst(p.x,p.y,color,inc===2?24:14); shake=inc===2?7:4;
     for(let i=0;i<(inc===2?10:6);i++){ particles.push({x:p.x+(Math.random()-0.5)*20,y:p.y,vx:(Math.random()-0.5)*2,vy:-3-Math.random()*4,life:1,color}); }
-    sg.rivals.forEach(r=>{ if(before<=r.h && sg.height>r.h){ sg.msg='超车 '+r.name+'!'; sg.msgT=1400; } });
+    sg.rivals.forEach(r=>{ if(before<=r.h && sg.height>r.h){ sg.msg=tr('超车 ')+r.name+'!'; sg.msgT=1400; } });
     document.getElementById('hudScore').textContent=G.score+sg.levelScore;
   } else { shake=4; }
   popup(p.x,p.y-26,(inc===2?'↑ ':inc===1?'↑ ':'')+label+(inc>0&&sg.combo>1?' x'+sg.combo:''),color);
   if(sg.height>=sg.goal && !sg.done){
-    sg.done=true; flashGreen(); shake=12; burst(p.x,p.y,'#5bd55b',40); popup(p.x,p.y-30,'登顶树冠！','#5bd55b');
+    sg.done=true; flashGreen(); shake=12; burst(p.x,p.y,'#5bd55b',40); popup(p.x,p.y-30,tr('登顶树冠！'),'#5bd55b');
     sceneTimeout(()=>{ stopScene(); levelClear(sg.levelScore+200); },900);
   }
 }
@@ -775,11 +829,11 @@ function drawSwing(){
   // bob (you)
   ctx.save(); ctx.shadowColor='#4caf78'; ctx.shadowBlur=10; ctx.fillStyle='#4caf78';
   ctx.beginPath(); ctx.arc(b.x,b.y,13,0,Math.PI*2); ctx.fill(); ctx.restore();
-  ctx.fillStyle='#0a180a'; ctx.font='bold 11px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('你',b.x,b.y+4);
-  if(vNow<0.55&&!sg.done){ const pulse=.55+.45*Math.abs(Math.sin(Date.now()/100)); ctx.globalAlpha=pulse; ctx.fillStyle='#5bd55b'; ctx.font='bold 22px "Space Mono",monospace'; ctx.fillText('▲ 甩!',b.x,b.y-30); ctx.globalAlpha=1; }
+  ctx.fillStyle='#0a180a'; ctx.font='bold 11px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(tr('你'),b.x,b.y+4);
+  if(vNow<0.55&&!sg.done){ const pulse=.55+.45*Math.abs(Math.sin(Date.now()/100)); ctx.globalAlpha=pulse; ctx.fillStyle='#5bd55b'; ctx.font='bold 22px "Space Mono",monospace'; ctx.fillText(tr('▲ 甩!'),b.x,b.y-30); ctx.globalAlpha=1; }
   drawEffects();
   drawClimbRuler();
-  if(sg.combo>1){ ctx.fillStyle='#5bd55b'; ctx.font='bold 15px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('连击 x'+sg.combo,b.cx,H-40); }
+  if(sg.combo>1){ ctx.fillStyle='#5bd55b'; ctx.font='bold 15px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(tr('连击 x')+sg.combo,b.cx,H-40); }
   if(sg.msgT>0){ ctx.globalAlpha=Math.min(1,sg.msgT/400); ctx.fillStyle='#ffd54a'; ctx.font='bold 20px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(sg.msg,b.cx,92); ctx.globalAlpha=1; }
   ctx.textAlign='left';
   ctx.restore();
@@ -787,10 +841,10 @@ function drawSwing(){
 function drawClimbRuler(){
   const rx=W*0.82, top=72, bot=H-72, hh=bot-top;
   ctx.strokeStyle='rgba(255,255,255,.1)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(rx,top); ctx.lineTo(rx,bot); ctx.stroke();
-  ctx.fillStyle='rgba(212,168,83,.65)'; ctx.font='10px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('树冠',rx,top-8);
-  ctx.fillStyle='rgba(90,122,90,.6)'; ctx.fillText('起点',rx,bot+16);
+  ctx.fillStyle='rgba(212,168,83,.65)'; ctx.font='10px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(tr('树冠'),rx,top-8);
+  ctx.fillStyle='rgba(90,122,90,.6)'; ctx.fillText(tr('起点'),rx,bot+16);
   ctx.fillStyle='#c0d4b8'; ctx.font='12px "Space Mono",monospace'; ctx.fillText(sg.height+' / '+sg.goal,rx,top-24);
-  const ms=[{name:'你',color:'#4caf78',h:sg.height,off:0},{name:'甲',color:'#d98a8a',h:sg.rivals[0].h,off:-16},{name:'乙',color:'#7fa8d4',h:sg.rivals[1].h,off:16}];
+  const ms=[{name:tr('你'),color:'#4caf78',h:sg.height,off:0},{name:tr('甲'),color:'#d98a8a',h:sg.rivals[0].h,off:-16},{name:tr('乙'),color:'#7fa8d4',h:sg.rivals[1].h,off:16}];
   ms.forEach(m=>{ const y=bot-(Math.min(sg.goal,m.h)/sg.goal)*hh;
     ctx.fillStyle=m.color; ctx.beginPath(); ctx.arc(rx+m.off,y,7,0,Math.PI*2); ctx.fill();
     ctx.fillStyle='#0a180a'; ctx.font='bold 8px "Space Mono",monospace'; ctx.fillText(m.name,rx+m.off,y+3); });
@@ -805,8 +859,8 @@ const HG_TIME=45000;
 function hgPlayer(){ return { x:W/2, y:H-58 }; }
 function startShoot(){
   document.getElementById('goalWrap').style.display='block';
-  document.getElementById('goalLabel').textContent='守住果实 · 撑过 45 秒';
-  document.getElementById('stageHint').innerHTML='移动瞄准、<b>按住可连发</b> —— 优先打<b>害虫</b>和<b>抢果对手</b>，别让它们碰到果实';
+  document.getElementById('goalLabel').textContent=tr('守住果实 · 撑过 45 秒');
+  document.getElementById('stageHint').innerHTML=tr('移动瞄准、<b>按住可连发</b> —— 优先打<b>害虫</b>和<b>抢果对手</b>，别让它们碰到果实');
   hg={ fruitHP:100, time:HG_TIME, done:false, levelScore:0,
     aimX:W/2, aimY:H*0.4, bullets:[], enemies:[], spawnT:600,
     spawnGap:(modId()==='swarm'?720:1150)/G.diff,   // 虫潮 → much faster spawns
@@ -847,7 +901,7 @@ function shootUpdate(dt){
   // time-up wins FIRST (same-frame priority): surviving to 45s shouldn't be stolen by a last-frame hit
   if(hg.time<=0 && !hg.done){
     hg.time=0; hg.done=true; flashGreen(); shake=10;
-    popup(p.x,p.y-50,'守住了！','#5bd55b'); burst(p.x,p.y-26,'#5bd55b',40);
+    popup(p.x,p.y-50,tr('守住了！'),'#5bd55b'); burst(p.x,p.y-26,'#5bd55b',40);
     sceneTimeout(()=>{ stopScene(); levelClear(hg.levelScore+hg.fruitHP*10+200); },900);
     document.getElementById('goalFill').style.width='100%';
     return;
@@ -868,7 +922,7 @@ function shootUpdate(dt){
         const dmg= e.type==='rival'?8:5; hg.fruitHP=Math.max(0,hg.fruitHP-dmg); if(G.perf)G.perf.fruitMin=Math.min(G.perf.fruitMin,hg.fruitHP); hg.hitFruitFx=180; shake=5;
         popup(p.x,p.y-44,'-'+dmg,'#e05252'); burst(p.x,p.y-26,'#e05252',8);
         hg.enemies.splice(i,1);
-        if(hg.fruitHP<=0 && !hg.done){ hg.done=true; sceneTimeout(()=>{ stopScene(); levelFail('果实被啃光了 —— 没守住。'); },600); }
+        if(hg.fruitHP<=0 && !hg.done){ hg.done=true; sceneTimeout(()=>{ stopScene(); levelFail(tr('果实被啃光了 —— 没守住。')); },600); }
         continue;
       }
     }
@@ -892,7 +946,7 @@ function killEnemy(e,i){
   hg.enemies.splice(i,1); hg.kills++; if(G.perf)G.perf.kills++;
   if(e.type==='gold'){ // gold = clear all pests + big score
     let cleared=0; for(let k=hg.enemies.length-1;k>=0;k--){ if(hg.enemies[k].type!=='gold'){ burst(hg.enemies[k].x,hg.enemies[k].y,'#ffd54a',8); hg.enemies.splice(k,1); cleared++; } }
-    hg.levelScore+=200+cleared*20; flashGreen(); shake=8; popup(e.x,e.y-16,'金虫！全清','#ffd54a');
+    hg.levelScore+=200+cleared*20; flashGreen(); shake=8; popup(e.x,e.y-16,tr('金虫！全清'),'#ffd54a');
   } else {
     hg.levelScore+= e.type==='rival'?60:30; popup(e.x,e.y-14,'+'+(e.type==='rival'?60:30), e.type==='rival'?'#d98a8a':'#cfe8a0');
   }
@@ -908,8 +962,8 @@ function drawShoot(){
   const p=hgPlayer();
   // enemies
   hg.enemies.forEach(e=>{
-    if(e.type==='gold'){ ctx.save(); ctx.shadowColor='#ffd54a'; ctx.shadowBlur=14; ctx.fillStyle='#ffd54a'; ctx.beginPath(); ctx.arc(e.x,e.y,11,0,Math.PI*2); ctx.fill(); ctx.restore(); ctx.fillStyle='#1a1400'; ctx.font='bold 9px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('金',e.x,e.y+3); }
-    else if(e.type==='rival'){ ctx.fillStyle='#d98a8a'; ctx.beginPath(); ctx.arc(e.x,e.y,15,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#1a0808'; ctx.font='bold 10px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('敌',e.x,e.y+3); if(e.hp>1){ctx.strokeStyle='#fff';ctx.globalAlpha=.4;ctx.lineWidth=2;ctx.beginPath();ctx.arc(e.x,e.y,18,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;} }
+    if(e.type==='gold'){ ctx.save(); ctx.shadowColor='#ffd54a'; ctx.shadowBlur=14; ctx.fillStyle='#ffd54a'; ctx.beginPath(); ctx.arc(e.x,e.y,11,0,Math.PI*2); ctx.fill(); ctx.restore(); ctx.fillStyle='#1a1400'; ctx.font='bold 9px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(tr('金'),e.x,e.y+3); }
+    else if(e.type==='rival'){ ctx.fillStyle='#d98a8a'; ctx.beginPath(); ctx.arc(e.x,e.y,15,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#1a0808'; ctx.font='bold 10px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(tr('敌'),e.x,e.y+3); if(e.hp>1){ctx.strokeStyle='#fff';ctx.globalAlpha=.4;ctx.lineWidth=2;ctx.beginPath();ctx.arc(e.x,e.y,18,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;} }
     else { ctx.fillStyle='#b06a4a'; ctx.beginPath(); ctx.arc(e.x,e.y,9,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#7a4a2a'; ctx.lineWidth=1.5; for(let a=0;a<4;a++){const an=a/4*Math.PI*2+hg.t/200; ctx.beginPath(); ctx.moveTo(e.x+Math.cos(an)*9,e.y+Math.sin(an)*9); ctx.lineTo(e.x+Math.cos(an)*13,e.y+Math.sin(an)*13); ctx.stroke();} }
   });
   ctx.textAlign='left';
@@ -932,10 +986,10 @@ function drawShoot(){
   const bw=160,bx=p.x-bw/2,by=p.y-64;
   ctx.fillStyle='rgba(255,255,255,.08)'; roundRect(bx,by,bw,8,4); ctx.fill();
   ctx.fillStyle=hg.fruitHP>40?'#5bd55b':'#e05252'; roundRect(bx,by,bw*hg.fruitHP/100,8,4); ctx.fill();
-  ctx.fillStyle='#c0d4b8'; ctx.font='10px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('果实 '+Math.round(hg.fruitHP),p.x,by-5); ctx.textAlign='left';
+  ctx.fillStyle='#c0d4b8'; ctx.font='10px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(tr('果实 ')+Math.round(hg.fruitHP),p.x,by-5); ctx.textAlign='left';
   // timer + kills
   ctx.fillStyle='#c0d4b8'; ctx.font='bold 16px "Space Mono",monospace'; ctx.textAlign='left'; ctx.fillText('⏱ '+Math.ceil(Math.max(0,hg.time)/1000)+'s',20,34);
-  ctx.fillStyle='#9ad06a'; ctx.font='12px "Space Mono",monospace'; ctx.fillText('击杀 '+hg.kills,20,54);
+  ctx.fillStyle='#9ad06a'; ctx.font='12px "Space Mono",monospace'; ctx.fillText(tr('击杀 ')+hg.kills,20,54);
   ctx.restore();
 }
 
@@ -947,9 +1001,9 @@ const DUEL_PHASES={ 1:{speed:0.013,window:0.16,gold:0.42}, 2:{speed:0.019,window
 function duelPhase(){ return dg.bossHP>66?1:dg.bossHP>33?2:3; }
 function startDuel(){
   document.getElementById('goalWrap').style.display='block';
-  document.getElementById('goalLabel').textContent='树冠 Boss · 击败它';
-  document.getElementById('stageHint').innerHTML='<b style="color:#e05252">红光→点格挡</b>　<b style="color:#ffd54a">金光→点反击</b>　看准光圈缩到中心时点击/空格';
-  dg={ bossHP:100, hearts:3, done:false, levelScore:0, prompt:null, gapT:1100, t:0, msg:'看招！', msgT:1500, hitFx:0, bossFx:0, clash:null, clashDone:false };
+  document.getElementById('goalLabel').textContent=tr('树冠 Boss · 击败它');
+  document.getElementById('stageHint').innerHTML=tr('<b style="color:#e05252">红光→点格挡</b>　<b style="color:#ffd54a">金光→点反击</b>　看准光圈缩到中心时点击/空格');
+  dg={ bossHP:100, hearts:3, done:false, levelScore:0, prompt:null, gapT:1100, t:0, msg:tr('看招！'), msgT:1500, hitFx:0, bossFx:0, clash:null, clashDone:false };
   scene={ update:duelUpdate, draw:drawDuel, onDown:()=>duelTap(), onKey:(e)=>{ if(e.code==='Space'){ e.preventDefault(); duelTap(); } } };
   bindInput(); startLoop();
 }
@@ -962,10 +1016,10 @@ function spawnPrompt(){
 }
 function duelHitPlayer(){
   dg.hearts--; dg.hitFx=300; shake=8; if(G.perf)G.perf.bossNoHit=false;
-  popup(W/2,H*0.6,'受伤 -1','#e05252'); burst(W/2,H*0.42,'#e05252',16);
-  if(dg.hearts<=0 && !dg.done){ dg.done=true; sceneTimeout(()=>{ stopScene(); levelFail('你倒在了树冠之下 —— 再来一次。'); },800); }
+  popup(W/2,H*0.6,tr('受伤 -1'),'#e05252'); burst(W/2,H*0.42,'#e05252',16);
+  if(dg.hearts<=0 && !dg.done){ dg.done=true; sceneTimeout(()=>{ stopScene(); levelFail(tr('你倒在了树冠之下 —— 再来一次。')); },800); }
 }
-function startClash(){ dg.prompt=null; dg.gapT=0; dg.clash={ pos:0, dir:1, speed:0.02*G.diff, sweetC:0.5, sweetH:Math.max(0.10,0.15/Math.sqrt(G.diff)) }; dg.msg='最终对决！点击绿区终结它'; dg.msgT=2200; }
+function startClash(){ dg.prompt=null; dg.gapT=0; dg.clash={ pos:0, dir:1, speed:0.02*G.diff, sweetC:0.5, sweetH:Math.max(0.10,0.15/Math.sqrt(G.diff)) }; dg.msg=tr('最终对决！点击绿区终结它'); dg.msgT=2200; }
 function duelUpdate(dt){
   if(dg.done) return;
   dg.t+=dt; if(dg.msgT>0)dg.msgT-=dt; if(dg.hitFx>0)dg.hitFx-=dt; if(dg.bossFx>0)dg.bossFx-=dt;
@@ -980,7 +1034,7 @@ function duelUpdate(dt){
   if(!dg.prompt.resolved){
     dg.prompt.p+=dg.prompt.speed*(dt/16);
     if(dg.prompt.p>=1){
-      if(dg.prompt.type==='red') duelHitPlayer(); else popup(W/2,H*0.46,'反击落空','#9a9a8a');
+      if(dg.prompt.type==='red') duelHitPlayer(); else popup(W/2,H*0.46,tr('反击落空'),'#9a9a8a');
       dg.prompt.resolved=true; dg.prompt.fade=300; dg.gapT=Math.max(480,820-duelPhase()*90);
     }
   } else { dg.prompt.fade-=dt; if(dg.prompt.fade<=0) dg.prompt=null; }
@@ -990,19 +1044,19 @@ function duelTap(){
   if(dg.clash){
     if(Math.abs(dg.clash.pos-dg.clash.sweetC)<dg.clash.sweetH){
       dg.bossHP=0; dg.clash=null; dg.clashDone=true; dg.done=true; flashGreen(); shake=14;
-      popup(W/2,H*0.30,'夺冠！','#5bd55b'); burst(W/2,H*0.3,'#ffd54a',50); dg.levelScore+=400;
+      popup(W/2,H*0.30,tr('夺冠！'),'#5bd55b'); burst(W/2,H*0.3,'#ffd54a',50); dg.levelScore+=400;
       sceneTimeout(()=>{ stopScene(); levelClear(dg.levelScore + dg.hearts*150 + 300); },1100);
-    } else { popup(W/2,H*0.62,'没踩中绿区','#e0a052'); duelHitPlayer(); }
+    } else { popup(W/2,H*0.62,tr('没踩中绿区'),'#e0a052'); duelHitPlayer(); }
     return;
   }
   if(dg.prompt && !dg.prompt.resolved){
     const d=Math.abs(dg.prompt.p-dg.prompt.hit);
     dg.prompt.resolved=true; dg.prompt.fade=300; dg.gapT=Math.max(480,820-duelPhase()*90);
     if(d<dg.prompt.window){
-      if(dg.prompt.type==='red'){ popup(W/2,H*0.46,'格挡!','#5b9bd5'); burst(W/2,H*0.42,'#5b9bd5',10); shake=3; dg.levelScore+=20; }
-      else { dg.bossHP=Math.max(0,dg.bossHP-12); dg.bossFx=240; shake=5; dg.levelScore+=80; popup(W/2,H*0.3,'反击! -12','#ffd54a'); burst(W/2,H*0.3,'#ffd54a',16); }
+      if(dg.prompt.type==='red'){ popup(W/2,H*0.46,tr('格挡!'),'#5b9bd5'); burst(W/2,H*0.42,'#5b9bd5',10); shake=3; dg.levelScore+=20; }
+      else { dg.bossHP=Math.max(0,dg.bossHP-12); dg.bossFx=240; shake=5; dg.levelScore+=80; popup(W/2,H*0.3,tr('反击! -12'),'#ffd54a'); burst(W/2,H*0.3,'#ffd54a',16); }
     } else {
-      if(dg.prompt.type==='red') duelHitPlayer(); else popup(W/2,H*0.46,'太早/太晚','#e0a052');
+      if(dg.prompt.type==='red') duelHitPlayer(); else popup(W/2,H*0.46,tr('太早/太晚'),'#e0a052');
     }
   }
 }
@@ -1017,7 +1071,7 @@ function drawDuel(){
   ctx.fillStyle=dg.hitFx>0?'#3a1414':'#241a2a'; ctx.strokeStyle='#7a5a8a'; ctx.lineWidth=2;
   ctx.beginPath(); ctx.arc(cx,bossY,52,0,Math.PI*2); ctx.fill(); ctx.stroke(); ctx.restore();
   ctx.fillStyle='#d4a853'; for(let k=-2;k<=2;k++){ ctx.beginPath(); ctx.moveTo(cx+k*20,bossY-44); ctx.lineTo(cx+k*20-8,bossY-66); ctx.lineTo(cx+k*20+8,bossY-66); ctx.closePath(); ctx.fill(); }
-  ctx.fillStyle='#c0a0d0'; ctx.font='bold 13px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('树冠王',cx,bossY+5);
+  ctx.fillStyle='#c0a0d0'; ctx.font='bold 13px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(tr('树冠王'),cx,bossY+5);
   const bw=320,bx=cx-bw/2,by=bossY+74;
   ctx.fillStyle='rgba(255,255,255,.08)'; roundRect(bx,by,bw,12,6); ctx.fill();
   ctx.fillStyle='#b05a7a'; roundRect(bx,by,bw*Math.max(0,dg.bossHP)/100,12,6); ctx.fill();
@@ -1028,8 +1082,8 @@ function drawDuel(){
     ctx.globalAlpha=.5; ctx.strokeStyle=col; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx,py,tR,0,Math.PI*2); ctx.stroke(); ctx.globalAlpha=1;
     ctx.strokeStyle=col; ctx.lineWidth=inWin?5:3; if(inWin){ctx.shadowColor=col;ctx.shadowBlur=18;}
     ctx.beginPath(); ctx.arc(cx,py,Math.max(tR,ringR),0,Math.PI*2); ctx.stroke(); ctx.shadowBlur=0;
-    ctx.fillStyle=col; ctx.font='bold 18px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(dg.prompt.type==='red'?'格挡':'反击',cx,py+6);
-    if(inWin){ const pulse=.5+.5*Math.abs(Math.sin(dg.t/80)); ctx.globalAlpha=pulse; ctx.fillStyle=col; ctx.font='bold 20px "Space Mono",monospace'; ctx.fillText('● 点!',cx,py+tR+34); ctx.globalAlpha=1; }
+    ctx.fillStyle=col; ctx.font='bold 18px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(dg.prompt.type==='red'?tr('格挡'):tr('反击'),cx,py+6);
+    if(inWin){ const pulse=.5+.5*Math.abs(Math.sin(dg.t/80)); ctx.globalAlpha=pulse; ctx.fillStyle=col; ctx.font='bold 20px "Space Mono",monospace'; ctx.fillText(tr('● 点!'),cx,py+tR+34); ctx.globalAlpha=1; }
   }
   if(dg.clash){
     const mw=Math.min(440,W-80),mx=(W-mw)/2,my=H*0.54,mh=22, inZone=Math.abs(dg.clash.pos-dg.clash.sweetC)<dg.clash.sweetH;
@@ -1037,12 +1091,12 @@ function drawDuel(){
     const sx=mx+(dg.clash.sweetC-dg.clash.sweetH)*mw, sw=dg.clash.sweetH*2*mw;
     if(inZone){ctx.shadowColor='#5bd55b';ctx.shadowBlur=20;} ctx.fillStyle='rgba(91,213,91,.85)'; roundRect(sx,my,sw,mh,11); ctx.fill(); ctx.shadowBlur=0;
     const curX=mx+dg.clash.pos*mw; ctx.fillStyle='#fff'; ctx.fillRect(curX-2,my-6,4,mh+12);
-    ctx.fillStyle='#ffd54a'; ctx.font='bold 16px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText('最终对决 · 点击绿区',cx,my-16);
+    ctx.fillStyle='#ffd54a'; ctx.font='bold 16px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(tr('最终对决 · 点击绿区'),cx,my-16);
   }
   drawEffects();
   ctx.textAlign='left'; ctx.font='20px "Space Mono",monospace';
   for(let k=0;k<3;k++){ ctx.fillStyle=k<dg.hearts?'#e05252':'rgba(224,82,82,.2)'; ctx.fillText('♥',24+k*26,H-24); }
-  ctx.fillStyle='#7a5a8a'; ctx.font='11px "Space Mono",monospace'; ctx.textAlign='right'; ctx.fillText('阶段 '+(dg.clash?'终结':duelPhase()),W-20,H-24);
+  ctx.fillStyle='#7a5a8a'; ctx.font='11px "Space Mono",monospace'; ctx.textAlign='right'; ctx.fillText(tr('阶段 ')+(dg.clash?tr('终结'):duelPhase()),W-20,H-24);
   if(dg.msgT>0){ ctx.globalAlpha=Math.min(1,dg.msgT/500); ctx.fillStyle='#ffd54a'; ctx.font='bold 20px "Space Mono",monospace'; ctx.textAlign='center'; ctx.fillText(dg.msg,cx,H*0.74); ctx.globalAlpha=1; }
   ctx.textAlign='left';
   ctx.restore();
@@ -1051,7 +1105,7 @@ function drawDuel(){
 // ═══════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════
-resize();renderLineup();renderHUD();
+resize();renderLineup();renderHUD();applyLang();
 </script>
 </body>
 </html>
