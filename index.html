@@ -129,8 +129,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);overflow:hid
       <div><div class="s-v" id="roBestR" style="font-size:15px;color:var(--gold)">0</div><div class="s-l" id="roBestRL">最高轮</div></div>
       <div><div class="s-v" id="roBestS" style="font-size:15px;color:var(--gold)">0</div><div class="s-l" id="roBestSL">最高分</div></div>
     </div>
-    <div class="ic-how" id="roNext" style="color:var(--green);margin-bottom:20px"></div>
-    <button class="btn" id="roAgain" onclick="startRun()">再爬一次 →</button>
+    <div class="ic-how" id="roNext" style="color:var(--green);margin-bottom:14px"></div>
+    <canvas id="cardCanvas" width="720" height="960" style="display:none"></canvas>
+    <img id="cardImg" alt="" style="width:170px;border:1px solid var(--border);border-radius:6px;margin-bottom:14px;display:none">
+    <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+      <button class="btn" onclick="downloadCard()" style="padding:10px 16px">⬇ <span id="roCardL">保存卡片</span></button>
+      <button class="btn" onclick="copyResult()" style="padding:10px 16px"><span id="roCopyL">复制结果</span></button>
+      <button class="btn" id="roAgain" onclick="startRun()" style="padding:10px 16px"><span id="roAgainL">再爬一次</span> →</button>
+    </div>
   </div>
 </div>
 
@@ -209,6 +215,7 @@ const EN={
   '5 个小游戏循环成一轮，越爬越快、每轮天象不同。失败即结束。':'5 minigames = one round. Faster each round, new weather every time. One fail ends the run.',
   '无尽攀登 · ENDLESS':'ENDLESS CLIMB','点击任意处开始':'Tap anywhere to start',
   '本轮终结 · YOUR RUN':'YOUR RUN','爬到第几轮':'Round reached','本局得分':'Run score','最高轮':'Best round','最高分':'Best score','再爬一次 →':'Climb again →',
+  '保存卡片':'Save Card','复制结果':'Copy Result','再爬一次':'Play Again','结果已复制':'Result copied!',
 };
 function tr(s){ return (lang==='en' && EN[s]!==undefined) ? EN[s] : s; }
 function setGoal(zh){ G.goalKey=zh; document.getElementById('goalLabel').textContent=tr(zh); }
@@ -219,8 +226,15 @@ function applyLang(){
   const set=(id,zh)=>{const e=document.getElementById(id);if(e)e.textContent=tr(zh);};
   set('introSub',tr('无尽攀登 · 看你能爬到第几轮')); set('introStart',tr('开始攀登 →')); set('scoreLbl',tr('分数'));
   set('rbLabel',tr('无尽攀登 · ENDLESS')); set('rbStart',tr('点击任意处开始'));
-  set('roLabel',tr('本轮终结 · YOUR RUN')); set('roRoundL',tr('爬到第几轮')); set('roScoreL',tr('本局得分')); set('roBestRL',tr('最高轮')); set('roBestSL',tr('最高分')); set('roAgain',tr('再爬一次 →'));
-  if(typeof G!=='undefined'&&G){ renderLineup(); renderHUD(); if(G.goalKey)setGoal(G.goalKey); if(G.hintKey)setHint(G.hintKey); }
+  set('roLabel',tr('本轮终结 · YOUR RUN')); set('roRoundL',tr('爬到第几轮')); set('roScoreL',tr('本局得分')); set('roBestRL',tr('最高轮')); set('roBestSL',tr('最高分'));
+  set('roCardL','保存卡片'); set('roCopyL','复制结果'); set('roAgainL','再爬一次');
+  if(typeof G!=='undefined'&&G){ renderLineup(); renderHUD(); if(G.goalKey)setGoal(G.goalKey); if(G.hintKey)setHint(G.hintKey);
+    if(G.lastTitle && document.getElementById('scRunOver').classList.contains('show')){
+      document.getElementById('roTitle').textContent=(lang==='en'?G.lastTitle.en:G.lastTitle.name);
+      document.getElementById('roEn').textContent=(lang==='en'?G.lastTitle.name:G.lastTitle.en);
+      renderShareCard();
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -359,7 +373,55 @@ function endRun(msg){
   document.getElementById('roNext').innerHTML = (newBestR&&G.round>1)
     ? tr('🏆 新纪录！爬到了第 ')+G.round+tr(' 轮')
     : tr('下个目标：超过第 ')+G.bestRound+tr(' 轮');
+  G.lastTitle=t;
+  renderShareCard();
   show('scRunOver');
+}
+// ── Shareable "Tree Crown" card ──
+function fakePct(round){ return Math.max(1, Math.min(95, Math.round(70/Math.pow(round,0.62)))); }
+function renderShareCard(){
+  const c=document.getElementById('cardCanvas'), x=c.getContext('2d'), W=720,H=960;
+  const t=G.lastTitle||pickTitle(), pct=fakePct(G.round);
+  // bg
+  const g=x.createLinearGradient(0,0,0,H); g.addColorStop(0,'#0a1f12'); g.addColorStop(1,'#050d06');
+  x.fillStyle=g; x.fillRect(0,0,W,H);
+  x.strokeStyle='rgba(212,168,83,.5)'; x.lineWidth=3; x.strokeRect(20,20,W-40,H-40);
+  x.textAlign='center';
+  x.fillStyle='#4caf78'; x.font='bold 40px "Space Mono",monospace'; x.fillText('THE TREE ARENA',W/2,110);
+  x.fillStyle='#5a7a5a'; x.font='16px "Space Mono",monospace'; x.fillText(lang==='en'?'ENDLESS CLIMB':'无 尽 攀 登',W/2,144);
+  x.font='150px serif'; x.fillText('🌲',W/2,360);
+  // title
+  x.fillStyle='#d4a853'; x.font='bold 58px "Space Mono",monospace'; x.fillText(lang==='en'?t.en:t.name,W/2,470);
+  x.fillStyle='#7a6a4a'; x.font='20px "Space Mono",monospace'; x.fillText(lang==='en'?t.name:t.en,W/2,506);
+  // round + score
+  x.fillStyle='#c0d4b8'; x.font='bold 80px "Space Mono",monospace';
+  x.fillText((lang==='en'?'Round ':'第 ')+G.round+(lang==='en'?'':' 轮'),W/2,620);
+  x.fillStyle='#5bd55b'; x.font='34px "Space Mono",monospace'; x.fillText((lang==='en'?'Score ':'得分 ')+G.score,W/2,668);
+  // fake percentile (per ChatGPT — very shareable)
+  x.fillStyle='#e0a052'; x.font='24px "Space Mono",monospace';
+  x.fillText(lang==='en'?`Only ${pct}% climb this high`:`只有 ${pct}% 的人爬到这么高`,W/2,740);
+  // best
+  x.fillStyle='#5a7a5a'; x.font='18px "Space Mono",monospace';
+  x.fillText((lang==='en'?'Best ':'最高 ')+'R'+G.bestRound+' · '+G.bestScore,W/2,800);
+  // footer url
+  x.fillStyle='#4caf78'; x.font='20px "Space Mono",monospace'; x.fillText('treekiller-production.up.railway.app',W/2,900);
+  x.textAlign='left';
+  const img=document.getElementById('cardImg'); img.src=c.toDataURL('image/png'); img.style.display='inline-block';
+}
+function downloadCard(){
+  const a=document.createElement('a');
+  a.download='tree-arena-round'+G.round+'.png';
+  a.href=document.getElementById('cardCanvas').toDataURL('image/png');
+  a.click();
+}
+function copyResult(){
+  const t=G.lastTitle||pickTitle(), pct=fakePct(G.round);
+  const txt = lang==='en'
+    ? `🌲 The Tree Arena — I'm a ${t.en}! Reached Round ${G.round}, score ${G.score}. Only ${pct}% climb this high.\nPlay: https://treekiller-production.up.railway.app`
+    : `🌲 The Tree Arena — 我是「${t.name}」！爬到第 ${G.round} 轮，得分 ${G.score}，只有 ${pct}% 的人爬到这么高。\n来玩：https://treekiller-production.up.railway.app`;
+  const done=()=>{ const b=document.getElementById('roCopyL'); const o=b.textContent; b.textContent=tr('结果已复制'); setTimeout(()=>b.textContent=o,1500); };
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done).catch(done);
+  else done();
 }
 // round banner (auto-advance ~2.4s or click)
 function showRoundBanner(onDone){
