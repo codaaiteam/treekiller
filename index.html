@@ -84,8 +84,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);overflow:hid
     <div class="title">THE TREE ARENA</div>
     <div class="sub" id="introSub">无尽攀登 · 看你能爬到第几轮</div>
     <div class="lineup" id="lineup"></div>
-    <div class="ic-stat" id="introBest" style="margin-bottom:20px"></div>
+    <div class="ic-stat" id="introBest" style="margin-bottom:18px"></div>
     <button class="btn" id="introStart" onclick="startRun()">开始攀登 →</button>
+    <button class="btn" id="introDaily" onclick="startDaily()" style="margin-top:10px;border-color:var(--gold);color:var(--gold)">📅 <span id="introDailyL">每日挑战</span></button>
+    <div id="introDailyInfo" style="font-size:10px;color:var(--muted);margin-top:8px"></div>
   </div>
 </div>
 
@@ -216,6 +218,7 @@ const EN={
   '无尽攀登 · ENDLESS':'ENDLESS CLIMB','点击任意处开始':'Tap anywhere to start',
   '本轮终结 · YOUR RUN':'YOUR RUN','爬到第几轮':'Round reached','本局得分':'Run score','最高轮':'Best round','最高分':'Best score','再爬一次 →':'Climb again →',
   '保存卡片':'Save Card','复制结果':'Copy Result','再爬一次':'Play Again','结果已复制':'Result copied!',
+  '每日挑战':'Daily Challenge','今日最佳':"Today's best",'同一套天象，比谁爬得高':'Same weather for all · climb highest','每日挑战 · ':'Daily Challenge · ',
 };
 function tr(s){ return (lang==='en' && EN[s]!==undefined) ? EN[s] : s; }
 function setGoal(zh){ G.goalKey=zh; document.getElementById('goalLabel').textContent=tr(zh); }
@@ -227,7 +230,7 @@ function applyLang(){
   set('introSub',tr('无尽攀登 · 看你能爬到第几轮')); set('introStart',tr('开始攀登 →')); set('scoreLbl',tr('分数'));
   set('rbLabel',tr('无尽攀登 · ENDLESS')); set('rbStart',tr('点击任意处开始'));
   set('roLabel',tr('本轮终结 · YOUR RUN')); set('roRoundL',tr('爬到第几轮')); set('roScoreL',tr('本局得分')); set('roBestRL',tr('最高轮')); set('roBestSL',tr('最高分'));
-  set('roCardL','保存卡片'); set('roCopyL','复制结果'); set('roAgainL','再爬一次');
+  set('roCardL','保存卡片'); set('roCopyL','复制结果'); set('roAgainL','再爬一次'); set('introDailyL','每日挑战');
   if(typeof G!=='undefined'&&G){ renderLineup(); renderHUD(); if(G.goalKey)setGoal(G.goalKey); if(G.hintKey)setHint(G.hintKey);
     if(G.lastTitle && document.getElementById('scRunOver').classList.contains('show')){
       document.getElementById('roTitle').textContent=(lang==='en'?G.lastTitle.en:G.lastTitle.name);
@@ -280,10 +283,19 @@ const MODIFIERS=[
   {id:'barren', name:'贫土',     icon:'🏜', desc:'破土绿区更小、藤摆更快'},
   {id:'rage',   name:'狂暴树冠', icon:'👹', desc:'夺冠关 Boss 更快更凶'},
 ];
+// deterministic RNG so a Daily Challenge plays the same weather sequence for everyone that day
+function hashStr(s){ let h=2166136261; for(let i=0;i<s.length;i++){ h=Math.imul(h^s.charCodeAt(i),16777619); } return h>>>0; }
+function mulberry32(a){ return function(){ a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296; }; }
+function dailyDate(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function pickModifier(round){
   if(round<=1) return MODIFIERS[0];                 // first round is calm
-  if(Math.random()<0.22) return MODIFIERS[0];
-  return MODIFIERS[1+Math.floor(Math.random()*(MODIFIERS.length-1))];
+  if(!G.daily){
+    if(Math.random()<0.22) return MODIFIERS[0];
+    return MODIFIERS[1+Math.floor(Math.random()*(MODIFIERS.length-1))];
+  }
+  const rng=mulberry32(hashStr(dailyDate()+'#'+round));   // fixed per (date, round)
+  if(rng()<0.22) return MODIFIERS[0];
+  return MODIFIERS[1+Math.floor(rng()*(MODIFIERS.length-1))];
 }
 // ── End-of-run Title (screenshot-worthy, per ChatGPT) ──
 const TITLES=[
@@ -320,22 +332,27 @@ function renderLineup(){
   document.getElementById('introBest').innerHTML = (G.bestRound>0)
     ? `<div><div class="s-v" style="color:var(--gold)">${G.bestRound}</div><div class="s-l">${tr('最高轮')}</div></div><div><div class="s-v" style="color:var(--gold)">${G.bestScore}</div><div class="s-l">${tr('最高分')}</div></div>`
     : `<div style="font-size:11px;color:var(--muted)">${tr('5 个小游戏循环成一轮，越爬越快、每轮天象不同。失败即结束。')}</div>`;
+  const di=document.getElementById('introDailyInfo'); if(di){ const db=dailyBest();
+    di.innerHTML = dailyDate()+(db?(' · '+tr('今日最佳')+' '+tr('第 ')+db.round+tr(' 轮')):' · '+tr('同一套天象，比谁爬得高')); }
 }
 function renderHUD(){
   const L=LEVELS[G.level-1];
   const m=G.modifier&&G.modifier.id!=='none'?(' · '+G.modifier.icon+tr(G.modifier.name)):'';
-  document.getElementById('lvlBadge').textContent=`${tr('第 ')}${G.round}${tr(' 轮')} Lv${L.lv} ${tr(L.name)}${m}`;
+  document.getElementById('lvlBadge').textContent=`${G.daily?'📅 ':''}${tr('第 ')}${G.round}${tr(' 轮')} Lv${L.lv} ${tr(L.name)}${m}`;
   document.getElementById('hudScore').textContent=G.score;
   document.getElementById('hudPath').innerHTML=LEVELS.map(x=>`<div class="pnode ${x.lv<G.level?'done':x.lv===G.level?'now':''}"></div>`).join('');
 }
 
 // ── ENDLESS FLOW: Round = Lv1→Lv5; clear all 5 → next round (harder + new 天象); fail = run over ──
-function startRun(){
+function startRun(daily){
+  G.daily=!!daily;
   G.round=1; G.level=1; G.score=0;
   G.perf={sun:0,vineCombo:0,kills:0,fruitMin:100,bossNoHit:true};
   ['scIntro','scRunOver','scFail','scClear','scLevelIntro'].forEach(hide);
   beginRound();
 }
+function startDaily(){ startRun(true); }
+function dailyBest(){ try{ return JSON.parse(localStorage.getItem('ta_daily_'+dailyDate())||'null'); }catch(e){ return null; } }
 function beginRound(){
   G.level=1; G.diff=gDiff(); G.modifier=pickModifier(G.round);
   showRoundBanner(()=>beginPlay());
@@ -362,6 +379,7 @@ function endRun(msg){
   const newBestR=G.round>G.bestRound, newBestS=G.score>G.bestScore;
   if(newBestR){ G.bestRound=G.round; try{localStorage.setItem('ta_bestRound',G.round);}catch(e){} }
   if(newBestS){ G.bestScore=G.score; try{localStorage.setItem('ta_bestScore',G.score);}catch(e){} }
+  if(G.daily){ const db=dailyBest(); if(!db||G.round>db.round||(G.round===db.round&&G.score>db.score)){ try{localStorage.setItem('ta_daily_'+dailyDate(),JSON.stringify({round:G.round,score:G.score}));}catch(e){} } }
   const t=pickTitle();
   document.getElementById('roTitle').textContent=(lang==='en'?t.en:t.name);
   document.getElementById('roEn').textContent=(lang==='en'?t.name:t.en);
@@ -370,9 +388,12 @@ function endRun(msg){
   document.getElementById('roBestR').textContent=G.bestRound;
   document.getElementById('roBestS').textContent=G.bestScore;
   document.getElementById('roMsg').textContent=msg||'';
-  document.getElementById('roNext').innerHTML = (newBestR&&G.round>1)
+  document.getElementById('roLabel').textContent = G.daily ? (tr('每日挑战')+' · '+dailyDate()) : tr('本轮终结 · YOUR RUN');
+  if(G.daily){ const db=dailyBest(); document.getElementById('roNext').innerHTML = tr('今日最佳')+'：'+tr('第 ')+(db?db.round:G.round)+tr(' 轮')+' · '+(db?db.score:G.score); }
+  else document.getElementById('roNext').innerHTML = (newBestR&&G.round>1)
     ? tr('🏆 新纪录！爬到了第 ')+G.round+tr(' 轮')
     : tr('下个目标：超过第 ')+G.bestRound+tr(' 轮');
+  document.getElementById('roAgain').setAttribute('onclick', G.daily?'startDaily()':'startRun()');
   G.lastTitle=t;
   renderShareCard();
   show('scRunOver');
@@ -426,6 +447,7 @@ function copyResult(){
 // round banner (auto-advance ~2.4s or click)
 function showRoundBanner(onDone){
   const m=G.modifier;
+  document.getElementById('rbLabel').textContent = G.daily ? ('📅 '+tr('每日挑战 · ')+dailyDate()) : tr('无尽攀登 · ENDLESS');
   document.getElementById('rbIcon').textContent = (m&&m.icon)?m.icon:'🌳';
   document.getElementById('rbNum').textContent=tr('第 ')+G.round+tr(' 轮');
   document.getElementById('rbMod').textContent=(m&&m.id!=='none')?(tr('本轮天象 · ')+tr(m.name)):tr('风和日丽');
